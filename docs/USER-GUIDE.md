@@ -1,6 +1,6 @@
 # User guide
 
-NEO-M9N Monitor has a **session setup sidebar** (F9) and seven pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
+NEO-M9N Monitor has a **session setup sidebar** (F9) and eight pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
 
 Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their groups out in up to three columns: three on a wide page, two on a typical desktop window, one at phone width. Hiding the sidebar (F9) widens the page, so it can gain a column. On Satellites the sky plot sits beside the table when both fit, moves above it when they don't, and grows on large screens.
 
@@ -78,6 +78,23 @@ Switch between **km/h** and **mph** (also miles and feet) at the top; the choice
 How the trip is measured: the session counts the great-circle distance between consecutive valid, fresh navigation epochs, using the receiver's time between them. Segments below 0.5 m/s are skipped so a parked receiver's position wander is not counted as travel, and a jump that would need more than 540 km/h is treated as a glitch. The average speed is distance over moving time, so stops don't lower it. After a gap in reception (a tunnel), the straight line between the last and next fix is counted. Distances are as accurate as the positions: expect a few metres per fix, and slightly short on tight bends.
 
 Without a valid, current fix the instruments dim and say **No Fix**, **Stale** or **Waiting**; the last speed is never shown as live. While a session runs and this page is showing, the screen is kept from blanking.
+
+## Map
+
+![Map page](screenshots/map.png)
+
+Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. **Reset Trip** (here or on the Vehicle page) clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
+
+Choose how the map is drawn at the top of the page:
+- **Off** (default): the position and track on a coordinate grid, with a scale bar. Nothing leaves your computer.
+- **Online**: an OpenStreetMap map. The first time, a notice explains exactly what is shared, and nothing changes unless you accept:
+  - **Sent:** your IP address, and which map tiles you view (zoomed in, roughly where you are), to OpenStreetMap's tile servers.
+  - **Never sent:** coordinates, your track or anything about the receiver.
+  - **Visible:** while online, the page shows *Online: OpenStreetMap*.
+
+Online tiles are requested only for the area on screen and only while the Map page is showing: never in the background and never in advance. Viewed tiles are cached in `~/.cache/neo-m9n/tiles`, honouring the server's caching rules, so they aren't downloaded again. **Map storage** (the disk button) shows the cache size and lets you set a limit (default 200 MB) or **Clear Map Cache**. OpenStreetMap does not allow its tiles to be used offline, so the cache is only used while online.
+
+Maps need libshumate (`sudo dnf install libshumate`). Without it the page draws the track on a grid and says how to install it.
 
 ## Messages
 

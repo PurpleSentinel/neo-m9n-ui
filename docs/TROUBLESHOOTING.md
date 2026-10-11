@@ -33,4 +33,4 @@ Timestamped names mean a raw capture is never overwritten. The JSON report inclu
 
 If the tty disappears before the session can open it, the session doesn't start and no GNSS report exists, but the Host page still provides host evidence. If it disappears after opening, the test records `usb_transport: FAIL`, shows the report and writes it if its output path is usable; otherwise *Save Report…* lets you keep it.
 
-Do not disable SELinux to troubleshoot a serial access problem. Inspect the actual error, permissions and audit evidence. The application does not make network connections, never runs privileged commands and needs no elevated privileges once suitable tty access is granted.
+Do not disable SELinux to troubleshoot a serial access problem. Inspect the actual error, permissions and audit evidence. The application makes no network connections unless you switch the Map page to Online, never runs privileged commands and needs no elevated privileges once suitable tty access is granted.

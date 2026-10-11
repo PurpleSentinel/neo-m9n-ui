@@ -19,6 +19,8 @@ PAGES = [
          "RF, antenna and receiver status appear here during a session."),
     Page("vehicle", "Vehicle", "emoji-travel-symbolic", "No Vehicle Data",
          "Start a session to see speed, trip distance, heading and altitude, sized for reading on the move."),
+    Page("map", "Map", "mark-location-symbolic", "No Map",
+         "Your position and track appear here on a grid, or on an online map if you choose."),
     Page("messages", "Messages", "view-list-bullet-symbolic", "No Messages",
          "Receiver notices, parser errors and the application log appear here."),
     Page("test", "Test", "object-select-symbolic", "No Device Test",

@@ -9,6 +9,7 @@
 | GObject typelibs | `gobject-introspection` | Yes | Includes the `cairo` typelib the bindings need; `python3-gobject` does not pull it in by itself |
 | GTK ≥ 4.12 | `gtk4` | Yes | Toolkit |
 | libadwaita ≥ 1.5 | `libadwaita` | Yes | GNOME widgets and styling |
+| libshumate 1.x | `libshumate` | Optional | The Map page's map widget (GNOME Maps uses it); without it the track is drawn on a grid |
 | Native USB serial driver | Fedora kernel `cdc_acm` module | Yes for native USB | Exposes the receiver as a tty; no proprietary driver download |
 | USB inventory | `usbutils` | Optional | `lsusb` on the Host page |
 | Host utilities | `util-linux` | Optional, generally installed | tty/file inspection utilities |
@@ -22,7 +23,7 @@ Serial I/O uses the standard library (`termios`, `tty`, `select`, `fcntl`), so t
 ## Workstation/Server installation
 
 ```bash
-sudo dnf install python3 python3-gobject gobject-introspection gtk4 libadwaita usbutils util-linux psmisc
+sudo dnf install python3 python3-gobject gobject-introspection gtk4 libadwaita libshumate usbutils util-linux psmisc
 python3 scripts/install-user.py
 ```
 

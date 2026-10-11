@@ -30,7 +30,11 @@ def headless_display():
             raise RuntimeError(f"GUI tests are required here but cannot run: {missing}")
         raise unittest.SkipTest(missing)
     display = 40 + os.getpid() % 50
-    server = subprocess.Popen(["gtk4-broadwayd", f":{display}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    cache = tempfile.TemporaryDirectory()
+    # Without XDG_RUNTIME_DIR, GLib puts the Broadway socket in the cache directory, so the
+    # display server and the probes must share the same (private) cache home.
+    server = subprocess.Popen(["gtk4-broadwayd", f":{display}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                              env={**os.environ, "XDG_CACHE_HOME": cache.name})
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     socket = Path(runtime) / f"broadway{display + 1}.socket" if runtime else None
     deadline = time.monotonic() + 5
@@ -40,15 +44,17 @@ def headless_display():
         time.sleep(1)
     env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
     config = tempfile.TemporaryDirectory()
-    # A private config home keeps tests away from the user's saved settings.
+    # Private config and cache homes keep tests away from the user's settings and map tiles.
     env.update(GDK_BACKEND="broadway", BROADWAY_DISPLAY=f":{display}", PYTHONPATH=str(ROOT),
-               ADW_DISABLE_PORTAL="1", GTK_USE_PORTAL="0", XDG_CONFIG_HOME=config.name)
+               ADW_DISABLE_PORTAL="1", GTK_USE_PORTAL="0", XDG_CONFIG_HOME=config.name,
+               XDG_CACHE_HOME=cache.name)
     try:
         yield env
     finally:
         server.terminate()
         server.wait(5)
         config.cleanup()
+        cache.cleanup()
 
 
 def run_probe(env, scenario, timeout=30, **extra_env):
