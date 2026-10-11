@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -16,9 +17,9 @@ class DependencyTests(unittest.TestCase):
         code = "import sys; sys.modules['gi'] = None; from m9n.gui.application import main; raise SystemExit(main())"
         result = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 1)
-        self.assertIn("dnf install gtk4 libadwaita python3-gobject", result.stderr)
+        self.assertIn("dnf install gtk4 libadwaita python3-gobject gobject-introspection", result.stderr)
 
-    @unittest.skipIf(gui_runtime_missing(), "GTK runtime not installed")
+    @unittest.skipIf(gui_runtime_missing() and not os.environ.get("M9N_REQUIRE_GUI"), "GTK runtime not installed")
     def test_old_versions_rejected(self):
         from m9n.gui import deps
         with patch("gi.version_info", (3, 40, 0)):

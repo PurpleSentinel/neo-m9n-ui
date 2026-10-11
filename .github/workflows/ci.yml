@@ -18,14 +18,15 @@ jobs:
       - name: Install the desktop runtime and test tools
         run: >
           dnf install -y --setopt=install_weak_deps=False
-          git python3 python3-gobject gtk4 libadwaita dbus-daemon dejavu-sans-fonts
+          git python3 python3-gobject gobject-introspection gtk4 libadwaita dbus-daemon dejavu-sans-fonts
           appstream desktop-file-utils psmisc usbutils util-linux
       - uses: actions/checkout@v4
       - name: Create an unprivileged test user
         # Root ignores file permissions and tty exclusivity, which several tests exercise.
         run: useradd --create-home tester && chown -R tester "$GITHUB_WORKSPACE"
       - name: Run all tests (GUI tests use a private Broadway display and D-Bus session)
-        run: runuser -u tester -- python3 -m unittest discover -s tests -v
+        # M9N_REQUIRE_GUI turns "GTK runtime unavailable" from a skip into an error in this job.
+        run: runuser -u tester -- env M9N_REQUIRE_GUI=1 python3 -m unittest discover -s tests -v
       - name: Validate desktop metadata
         run: |
           desktop-file-validate m9n/gui/data/io.github.PurpleSentinel.NeoM9N.desktop

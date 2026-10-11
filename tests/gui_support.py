@@ -22,11 +22,13 @@ def gui_runtime_missing():
 def headless_display():
     """Yield an environment for GTK clients that never touches the desktop session."""
     missing = gui_runtime_missing()
-    if missing:
-        raise unittest.SkipTest(missing)
     for tool in ("gtk4-broadwayd", "dbus-run-session"):
-        if not shutil.which(tool):
-            raise unittest.SkipTest(f"{tool} not installed")
+        if not missing and not shutil.which(tool):
+            missing = f"{tool} not installed"
+    if missing:
+        if os.environ.get("M9N_REQUIRE_GUI"):
+            raise RuntimeError(f"GUI tests are required here but cannot run: {missing}")
+        raise unittest.SkipTest(missing)
     display = 40 + os.getpid() % 50
     server = subprocess.Popen(["gtk4-broadwayd", f":{display}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     runtime = os.environ.get("XDG_RUNTIME_DIR")
