@@ -3,7 +3,7 @@ from gi.repository import Adw, GLib, Gtk
 
 from ..serialize import json_line, safe
 from . import format as fmt
-from .pages import SessionPage, copy_text
+from .pages import ColumnPage, SessionPage, copy_text
 
 PROGRESS_MS = 250
 STATUS = {
@@ -52,7 +52,7 @@ class TestPage(SessionPage):
             box.append(widget)
         self.running.set_child(box)
 
-        page = Adw.PreferencesPage()
+        page = self.columns = ColumnPage()
         self.status_icon = Gtk.Image(pixel_size=48)
         self.status_title = Gtk.Label(xalign=0)
         self.status_title.add_css_class("title-1")
@@ -66,10 +66,9 @@ class TestPage(SessionPage):
         self.hero.append(text)
         group = Adw.PreferencesGroup()
         group.add(self.hero)
-        page.add(group)
+        page.add_band([group])
         self.checks_group = Adw.PreferencesGroup(title="Checks")
         self.check_rows = []
-        page.add(self.checks_group)
 
         report = Adw.PreferencesGroup(title="Report")
         self.report_row = Adw.ActionRow(title="Report file", use_markup=False, subtitle_selectable=True)
@@ -84,8 +83,8 @@ class TestPage(SessionPage):
         self.report_row.add_suffix(save)
         self.report_row.add_suffix(copy)
         report.add(self.report_row)
-        page.add(report)
-        page.add(Adw.PreferencesGroup(title="Interpreting the Result", description=GUIDANCE))
+        page.add_flow([self.checks_group, report,
+                       Adw.PreferencesGroup(title="Interpreting the Result", description=GUIDANCE)])
 
         self.views = Gtk.Stack()
         self.views.add_named(self.running, "running")
@@ -118,6 +117,7 @@ class TestPage(SessionPage):
         self.show_report(result.report, failed)
         self.views.set_visible_child_name("result")
         self.stack.set_visible_child_name("content")
+        self.columns.reflow()
 
     def tick(self):
         window = self.get_root()

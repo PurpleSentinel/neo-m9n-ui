@@ -18,6 +18,7 @@ The command-line interface is replaced by a GTK 4 / libadwaita desktop applicati
 ### Added
 - Pages: Dashboard, Satellites (sortable table and sky plot), Receiver (RF/antenna/status), Messages (receiver notices and application log), Test (progress and report) and Host (replaces `doctor`/`list`).
 - Session setup sidebar with saved settings, timestamped evidence files and per-row validation.
+- Pages use the available width: groups flow into one to three balanced columns based on the page's own width, and the Satellites sky plot moves and grows to fit (#35).
 - Guaranteed clean exit: every way a session ends releases the receiver and completes the evidence files; signals exit with 128 + signal; suspend is inhibited during sessions.
 - Desktop entry, AppStream metadata and icons; `scripts/install-user.py --uninstall`.
 - CI on Fedora (including GUI tests on a headless Broadway display) and Python 3.10–3.13.

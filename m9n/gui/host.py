@@ -6,11 +6,11 @@ commands run through Gio.Subprocess so the window stays responsive.
 import json
 import shutil
 
-from gi.repository import Adw, Gio, GLib, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk, Pango
 
 from .. import hostinfo
 from ..serialize import json_line, safe
-from .pages import SessionPage, copy_button, copy_text
+from .pages import ColumnPage, SessionPage, copy_button, copy_text
 
 COMMAND_TITLES = {"lsusb": "USB devices (lsusb)", "udev": "udev properties", "owners": "Port owners (fuser)",
                   "gpsd": "gpsd service", "modemmanager": "ModemManager service"}
@@ -87,7 +87,6 @@ class HostPage(SessionPage):
         self.stack.set_visible_child_name("content")  # Host checks never need a session.
 
     def build(self):
-        prefs = Adw.PreferencesPage()
         actions = Gtk.Box(spacing=6)
         self.spinner = Adw.Spinner() if hasattr(Adw, "Spinner") else Gtk.Spinner(spinning=True)
         self.spinner.set_visible(False)
@@ -108,7 +107,6 @@ class HostPage(SessionPage):
                            ("modemmanager", "ModemManager")):
             self.checks[key] = check_row(title)
             self.summary.add(self.checks[key])
-        prefs.add(self.summary)
 
         self.fix = Adw.PreferencesGroup(
             title="Grant Access",
@@ -121,26 +119,26 @@ class HostPage(SessionPage):
             if not command.startswith("#"):
                 row.add_suffix(copy_button("Copy command", lambda _b, c=command: copy_text(self, c, "Command copied")))
             self.fix.add(row)
-        prefs.add(self.fix)
 
         self.devices = Adw.PreferencesGroup(title="USB Serial Devices")
         self.device_rows = []
-        prefs.add(self.devices)
 
         self.outputs = Adw.PreferencesGroup(title="Command Output")
         self.output_rows = {}
         for key, title in COMMAND_TITLES.items():
             row = Adw.ExpanderRow(title=title, use_markup=False)
-            label = Gtk.Label(xalign=0, selectable=True, wrap=True, margin_top=6, margin_bottom=6,
-                              margin_start=12, margin_end=12)
+            # Command output has long unbroken tokens (udev paths); breaking them keeps the column narrow.
+            label = Gtk.Label(xalign=0, selectable=True, wrap=True, wrap_mode=Pango.WrapMode.WORD_CHAR,
+                              margin_top=6, margin_bottom=6, margin_start=12, margin_end=12)
             label.add_css_class("monospace")
             row.add_row(label)
             row.label = label
             self.output_rows[key] = row
             self.outputs.add(row)
-        prefs.add(self.outputs)
-        prefs.add(Adw.PreferencesGroup(title="Hints", description="\n".join(hostinfo.HINTS)))
-        return prefs
+        hints = Adw.PreferencesGroup(title="Hints", description="\n".join(hostinfo.HINTS))
+        page = self.columns = ColumnPage()
+        page.add_flow([self.summary, self.fix, self.devices, self.outputs, hints])
+        return page
 
     def update(self, snapshot):
         self.snapshot = snapshot  # Host checks are independent of session data.
@@ -202,6 +200,7 @@ class HostPage(SessionPage):
                 code = result.get("exit_code")
                 row.set_subtitle("not installed" if not result["available"] else
                                  f"exit status {code}" if code is not None else "did not complete")
+        self.columns.reflow()
 
     def show_devices(self, rows):
         for row in self.device_rows:

@@ -3,7 +3,7 @@ from gi.repository import Adw, Gtk
 
 from ..serialize import json_line, safe
 from . import format as fmt
-from .pages import SessionPage, copy_button, copy_text, value_row
+from .pages import ColumnPage, SessionPage, copy_button, copy_text, value_row
 
 # Fix state -> (style class, icon). The title text always accompanies the colour.
 FIX_STYLE = {"valid": ("success", "object-select-symbolic"), "stale": ("warning", "dialog-warning-symbolic"),
@@ -12,7 +12,7 @@ FIX_STYLE = {"valid": ("success", "object-select-symbolic"), "stale": ("warning"
 
 class DashboardPage(SessionPage):
     def build(self):
-        page = Adw.PreferencesPage()
+        page = self.columns = ColumnPage()
 
         # Fix status: icon and text together, never colour alone.
         self.fix_icon = Gtk.Image(pixel_size=48)
@@ -27,13 +27,11 @@ class DashboardPage(SessionPage):
         hero.append(self.fix_icon)
         hero.append(text)
         self.hero = hero
-        group = Adw.PreferencesGroup()
-        group.add(hero)
-        page.add(group)
+        status = Adw.PreferencesGroup(valign=Gtk.Align.CENTER)
+        status.add(hero)
 
         self.issues_group = Adw.PreferencesGroup(title="Active Issues")
         self.issue_rows = []
-        page.add(self.issues_group)
 
         self.rows = {}
 
@@ -42,27 +40,30 @@ class DashboardPage(SessionPage):
             if suffix:
                 group.set_header_suffix(suffix)
             for key, label in rows:
-                self.rows[key] = value_row(label, wrap=key in ("extensions", "source", "timeouts"))
+                self.rows[key] = value_row(label, wrap=key in ("extensions", "source", "timeouts", "utc", "updated"))
                 group.add(self.rows[key])
-            page.add(group)
+            return group
 
-        group_of("Position", [("latitude", "Latitude"), ("longitude", "Longitude"),
-                              ("msl", "Altitude (mean sea level)"), ("ellipsoid", "Altitude (ellipsoid)"),
-                              ("hacc", "Horizontal accuracy"), ("vacc", "Vertical accuracy")],
-                 copy_button("Copy coordinates", self.copy_coordinates))
-        group_of("Motion", [("speed", "Speed"), ("course", "Course over ground")])
-        group_of("Dilution of Precision", [("pdop", "Position (PDOP)"), ("hdop", "Horizontal (HDOP)"),
-                                          ("vdop", "Vertical (VDOP)")])
-        group_of("Time", [("utc", "GNSS UTC"), ("tacc", "Time accuracy"), ("message", "Navigation message"),
-                          ("age", "Sample age"), ("progress", "Epoch progress age")])
-        group_of("Receiver Identity", [("software", "Firmware"), ("hardware", "Hardware"),
-                                       ("extensions", "Extensions")])
-        group_of("Session", [("source", "Source"), ("elapsed", "Elapsed"), ("updated", "Updated (host UTC)")],
-                 copy_button("Copy snapshot as JSON", self.copy_snapshot))
-        group_of("Stream", [("bytes", "Bytes received"), ("ubx", "UBX frames"), ("nmea", "NMEA frames"),
-                            ("checksum", "Checksum errors"), ("truncated", "Truncated frames"),
-                            ("oversize", "Oversized frames"), ("decode", "Undecodable payloads"),
-                            ("timeouts", "Unanswered polls"), ("rejected", "Rejected polls")])
+        page.add_band([status], [self.issues_group])
+        # Navigation first, then receiver identity, session and stream health.
+        page.add_flow(
+            [group_of("Position", [("latitude", "Latitude"), ("longitude", "Longitude"),
+                                   ("msl", "Altitude (mean sea level)"), ("ellipsoid", "Altitude (ellipsoid)"),
+                                   ("hacc", "Horizontal accuracy"), ("vacc", "Vertical accuracy")],
+                      copy_button("Copy coordinates", self.copy_coordinates)),
+             group_of("Motion", [("speed", "Speed"), ("course", "Course over ground")]),
+             group_of("Dilution of Precision", [("pdop", "Position (PDOP)"), ("hdop", "Horizontal (HDOP)"),
+                                               ("vdop", "Vertical (VDOP)")]),
+             group_of("Time", [("utc", "GNSS UTC"), ("tacc", "Time accuracy"), ("message", "Navigation message"),
+                               ("age", "Sample age"), ("progress", "Epoch progress age")]),
+             group_of("Receiver Identity", [("software", "Firmware"), ("hardware", "Hardware"),
+                                            ("extensions", "Extensions")]),
+             group_of("Session", [("source", "Source"), ("elapsed", "Elapsed"), ("updated", "Updated (host UTC)")],
+                      copy_button("Copy snapshot as JSON", self.copy_snapshot)),
+             group_of("Stream", [("bytes", "Bytes received"), ("ubx", "UBX frames"), ("nmea", "NMEA frames"),
+                                 ("checksum", "Checksum errors"), ("truncated", "Truncated frames"),
+                                 ("oversize", "Oversized frames"), ("decode", "Undecodable payloads"),
+                                 ("timeouts", "Unanswered polls"), ("rejected", "Rejected polls")])])
         return page
 
     def show(self, snapshot):
