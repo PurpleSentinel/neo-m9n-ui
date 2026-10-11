@@ -56,9 +56,9 @@ def dialog_name(win, action):
 
 def shell(win):
     result["pages"] = page_names(win)
-    # Messages always shows content: the application log matters before any session.
+    # Messages and Host always show content: neither needs a session.
     result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage)
-                                 for key, w in win.pages.items() if key != "messages")
+                                 for key, w in win.pages.items() if key not in ("messages", "host"))
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
     result["about"] = dialog_name(win, "about")
@@ -322,7 +322,7 @@ def messages(win):
         result["bounded"] = app_log.store.get_n_items()
         result["last_line"] = app_log.store.get_item(app_log.store.get_n_items() - 1).text
         adj = app_log.scrolled.get_vadjustment()
-        wait_for(lambda: adj.get_upper() > adj.get_page_size()
+        wait_for(lambda: app_log.following and adj.get_upper() > adj.get_page_size()
                  and adj.get_value() >= adj.get_upper() - adj.get_page_size() - 4, step2)
 
     def step2(following):
@@ -335,7 +335,7 @@ def messages(win):
         later(300, step3)
 
     def step3():
-        result["paused_at_top"] = app_log.scrolled.get_vadjustment().get_value() == 0
+        result["paused_at_top"] = app_log.scrolled.get_vadjustment().get_value() == 0 and not app_log.following
         app.quit()
     later(1500, step1)
 
@@ -392,6 +392,47 @@ def devicetest(win):
         later(100, app.quit)
     win.runner.connect("finished", finished)
     later(700, running)
+
+
+def host(win):
+    from m9n import hostinfo
+    page = win.pages["host"]
+    port = os.environ["M9N_HOST_PORT"]
+    os.environ["PATH"] = os.environ["M9N_FAKE_PATH"]  # Fake lsusb/systemctl/udevadm/fuser for determinism.
+    hostinfo.devices = lambda: [
+        {"port": port, "vid": "1546", "pid": "01a9", "serial": None, "product": "u-blox GNSS receiver",
+         "manufacturer": "u-blox AG", "by_id": ["/dev/serial/by-id/usb-u-blox-if00"]},
+        {"port": "/dev/ttyUSB7", "vid": "0403", "pid": "6001", "serial": "A1", "product": "FT232R",
+         "manufacturer": "FTDI", "by_id": []}]
+    if os.environ.get("M9N_SESSION_PORT"):
+        win.start_session(SessionConfig(port=os.environ["M9N_SESSION_PORT"]))
+    gaps, last = [], [GLib.get_monotonic_time()]
+
+    def ticker():
+        now = GLib.get_monotonic_time()
+        gaps.append((now - last[0]) / 1000)
+        last[0] = now
+        return page.collecting or page.document is None
+
+    def done(_ok):
+        doc = page.document
+        result["keys"] = list(doc)
+        result["checks"] = {k: r.get_subtitle() for k, r in page.checks.items()}
+        result["check_icons"] = {k: r.icon.get_icon_name() for k, r in page.checks.items()}
+        result["fix_visible"] = page.fix.get_visible()
+        result["devices"] = [r.get_title() for r in page.device_rows]
+        result["outputs"] = {k: r.get_subtitle() for k, r in page.output_rows.items() if r.get_visible()}
+        result["max_gap_ms"] = max(gaps)
+        result["tty_fds"] = sum(1 for fd in os.listdir("/proc/self/fd")
+                                if os.path.realpath(f"/proc/self/fd/{fd}") == os.path.realpath(port))
+        target = Path(os.environ["M9N_OUT"]) / "host.json"
+        result["saved"] = page.write(str(target)) and json.loads(target.read_text()) == doc
+        if win.runner.running:
+            win.runner.stop()
+        later(100, app.quit)
+    win.show_page("host")  # Mapping the page starts the first collection.
+    GLib.timeout_add(50, ticker)
+    wait_for(lambda: page.document is not None, done, timeout_ms=8000)
 
 
 def on_activate(_app):

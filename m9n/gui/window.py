@@ -8,6 +8,7 @@ from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, 
 from ..serialize import safe
 from ..settings import SessionSettings
 from .dashboard import DashboardPage
+from .host import HostPage
 from .messages import MessagesPage
 from .receiver import ReceiverPage
 from .satellites import SatellitesPage
@@ -19,7 +20,7 @@ from .testpage import TestPage
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
 PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
-              "messages": MessagesPage, "test": TestPage}
+              "messages": MessagesPage, "test": TestPage, "host": HostPage}
 
 
 def default_output_dir():
