@@ -1,10 +1,7 @@
 """Plain-text and ANSI live views. Receiver text is escaped for terminal safety."""
-import json
 import shutil
 
-
-def safe(value):
-    return "".join(c if c.isprintable() else "?" for c in str(value))
+from .serialize import json_line, safe  # noqa: F401  (re-exported)
 
 
 def fmt(value, digits=2):
@@ -58,7 +55,3 @@ def report_text(report):
     lines = [f"Device test: {report['status']} (exit {report['exit_code']})"]
     lines.extend(f"[{c['status']}] {c['name']}: {safe(c['detail'])}" for c in report["checks"])
     return "\n".join(lines)
-
-
-def json_line(value):
-    return json.dumps(value, separators=(",", ":"), allow_nan=False)
