@@ -5,6 +5,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -36,13 +37,16 @@ def headless_display():
     if not socket:
         time.sleep(1)
     env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
+    config = tempfile.TemporaryDirectory()
+    # A private config home keeps tests away from the user's saved settings.
     env.update(GDK_BACKEND="broadway", BROADWAY_DISPLAY=f":{display}", PYTHONPATH=str(ROOT),
-               ADW_DISABLE_PORTAL="1", GTK_USE_PORTAL="0")
+               ADW_DISABLE_PORTAL="1", GTK_USE_PORTAL="0", XDG_CONFIG_HOME=config.name)
     try:
         yield env
     finally:
         server.terminate()
         server.wait(5)
+        config.cleanup()
 
 
 def run_probe(env, scenario, timeout=30, **extra_env):
