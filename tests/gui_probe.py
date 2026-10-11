@@ -43,7 +43,7 @@ def dialog_name(win, action):
 
 def shell(win):
     result["pages"] = page_names(win)
-    result["empty_states"] = all(isinstance(w, Adw.StatusPage) for w in win.pages.values())
+    result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage) for w in win.pages.values())
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
     result["about"] = dialog_name(win, "about")
@@ -168,6 +168,41 @@ def setup(win):
     result["sensitive_while_running"] = panel.get_sensitive()
     result["config"] = {"mode": win.runner.config.mode, "fault": win.runner.config.fault,
                         "interval": win.runner.config.interval}
+
+
+def dashboard(win):
+    page = win.pages["dashboard"]
+    result["empty_before"] = page.stack.get_visible_child_name()
+    fault = os.environ.get("M9N_FAULT") or None
+    win.start_session(SessionConfig(source="demo", fault=fault, stale_after=float(os.environ.get("M9N_STALE", "5"))))
+    toasts = []
+    original = win.toast
+    win.toast = lambda text, timeout=3: toasts.append(text) or original(text, timeout)
+
+    def inspect():
+        result["visible"] = page.stack.get_visible_child_name()
+        result["fix_title"] = page.fix_title.get_label()
+        result["fix_detail"] = page.fix_detail.get_label()
+        result["values"] = {key: row.value.get_label() for key, row in page.rows.items()}
+        result["issues"] = [row.get_title() for row in page.issue_rows]
+        result["toasts"] = list(toasts)
+        page.copy_coordinates(None)
+        win.get_clipboard().read_text_async(None, clipboard)
+
+    def clipboard(board, outcome):
+        try:
+            result["clipboard"] = board.read_text_finish(outcome)
+        except GLib.Error:
+            result["clipboard"] = None  # Nothing was copied.
+        snapshot = json.loads(json.dumps(page.snapshot))
+        snapshot["identity"]["software"] = "EVIL\x1b[2J\x07FW"
+        snapshot["issues"] = ["Bell\x07 issue"]
+        page.update(snapshot)
+        result["sanitised"] = [page.rows["software"].value.get_label(), page.issue_rows[0].get_title()]
+        win.runner.stop()
+        result["after_stop_visible"] = page.stack.get_visible_child_name()
+        later(100, app.quit)
+    later(int(os.environ.get("M9N_WAIT_MS", "1300")), inspect)
 
 
 def on_activate(_app):

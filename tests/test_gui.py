@@ -73,6 +73,55 @@ class ShellTests(unittest.TestCase):
         self.assertEqual(result["windows"], 1)
 
 
+class DashboardTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "dashboard", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        self.assertEqual(result["empty_before"], "empty")
+        self.assertEqual(result["visible"], "content")
+        self.assertEqual(result["after_stop_visible"], "content")  # Final snapshot stays visible.
+        return result
+
+    def test_valid_demo_fix(self):
+        result = self.probe()
+        values = result["values"]
+        self.assertEqual(result["fix_title"], "Valid Fix")
+        self.assertEqual(result["fix_detail"], "3D · 10 satellites used")
+        self.assertEqual(values["latitude"], "54.1667070° N")
+        self.assertEqual(values["longitude"], "4.4503420° W")
+        self.assertEqual(values["msl"], "10.00 m")
+        self.assertEqual(values["speed"], "1.25 m/s (4.5 km/h)")
+        self.assertEqual(values["hdop"], "unknown")  # NAV-PVT has no HDOP; never blank or guessed.
+        self.assertEqual(values["software"], "SPG 4.04")
+        self.assertIn("MOD=NEO-M9N", values["extensions"])
+        self.assertEqual(values["source"], "SYNTHETIC DEMO")
+        self.assertEqual(result["issues"], ["No active issues"])
+        self.assertEqual(result["clipboard"], "54.1667070, -4.4503420")
+        self.assertEqual(result["sanitised"], ["EVIL?[2J?FW", "Bell? issue"])
+
+    def test_frozen_epochs_show_stale_with_issue_toast(self):
+        result = self.probe(M9N_FAULT="frozen", M9N_STALE="0.5", M9N_WAIT_MS="1800")
+        self.assertEqual(result["fix_title"], "Stale Navigation")
+        self.assertTrue(any("stale" in issue for issue in result["issues"]))
+        self.assertTrue(any("stale" in toast for toast in result["toasts"]))
+
+    def test_no_fix_hides_coordinates(self):
+        result = self.probe(M9N_FAULT="no-fix")
+        self.assertEqual(result["fix_title"], "No Fix")
+        self.assertEqual(result["values"]["latitude"], "unknown")
+        self.assertIsNone(result["clipboard"])
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:

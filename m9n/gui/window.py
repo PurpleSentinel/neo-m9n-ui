@@ -7,12 +7,14 @@ from gi.repository import Adw, Gio, GLib, GObject, Gtk
 from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
 from ..serialize import safe
 from ..settings import SessionSettings
-from .pages import PAGES, empty_page
+from .dashboard import DashboardPage
+from .pages import PAGES, SessionPage
 from .runner import SessionRunner
 from .setup import SetupPanel
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
+PAGE_TYPES = {"dashboard": DashboardPage}
 
 
 def default_output_dir():
@@ -30,7 +32,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack = Adw.ViewStack(vexpand=True)
         self.pages = {}
         for page in PAGES:
-            widget = empty_page(page)
+            widget = PAGE_TYPES.get(page.key, SessionPage)(page)
             self.pages[page.key] = widget
             self.stack.add_titled_with_icon(widget, page.key, page.title, page.icon)
 
@@ -82,6 +84,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.runner = SessionRunner()
         self.runner.connect("started", self.on_started)
         self.runner.connect("finished", self.on_finished)
+        self.runner.connect("snapshot", self.on_snapshot)
+        self.runner.connect("issue", self.on_issue)
+        self._issue_toasts = {}
         self._inhibit_cookie = 0
         self._close_after_stop = False
         self.toggle_action = Gio.SimpleAction.new("toggle-session", None)
@@ -97,7 +102,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.set_visible_child_name(key)
 
     def toast(self, text, timeout=3):
-        self.toasts.add_toast(Adw.Toast(title=text, timeout=timeout, use_markup=False))
+        toast = Adw.Toast(title=text, timeout=timeout, use_markup=False)
+        self.toasts.add_toast(toast)
+        return toast
 
     def set_banner(self, text=None):
         """Persistent notice such as SYNTHETIC DEMO or a disconnect; None hides it."""
@@ -151,7 +158,21 @@ class MainWindow(Adw.ApplicationWindow):
             return False
         return True
 
+    def on_snapshot(self, _runner, snapshot):
+        for page in self.pages.values():
+            page.update(snapshot)
+
+    def on_issue(self, _runner, kind, text):
+        # One toast per issue at a time; a resolved issue withdraws its toast.
+        toast = self._issue_toasts.pop(text, None)
+        if toast:
+            toast.dismiss()
+        if kind == "added":
+            self._issue_toasts[text] = self.toast(safe(text), timeout=6)
+
     def on_started(self, runner):
+        for page in self.pages.values():
+            page.session_started(runner.config)
         self.setup.set_sensitive(False)
         self.toggle_action.set_enabled(True)
         self.session_button.set_label("Stop")
@@ -166,6 +187,11 @@ class MainWindow(Adw.ApplicationWindow):
             "GNSS session in progress")
 
     def on_finished(self, runner, result):
+        for page in self.pages.values():
+            page.session_finished(result)
+        for toast in self._issue_toasts.values():
+            toast.dismiss()
+        self._issue_toasts.clear()
         self.setup.set_sensitive(True)
         self.setup.refresh()  # A pinned raw capture now exists, for example.
         self.session_button.set_label("Start")
