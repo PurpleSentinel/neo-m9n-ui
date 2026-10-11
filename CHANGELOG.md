@@ -2,7 +2,19 @@
 
 ## Unreleased
 
+### Added
+- **Map** page, next to Vehicle (#45):
+  - your live position, accuracy circle and the trip's track (coloured by speed), with follow and re-centre
+  - **Off** (default): a coordinate grid, no network.
+  - **Online**: an OpenStreetMap map, only after an informed privacy notice, with a visible *Online* indicator.
+  - **Tile requests:** only for the visible area, only while the page is showing, never prefetched.
+  - **Cache:** viewed tiles are cached in `~/.cache/neo-m9n/tiles` (size limit, **Clear Map Cache**), following OpenStreetMap's tile usage policy: its caching rules and an app User-Agent. The cache is never used offline.
+  - **Without libshumate:** the track is drawn on a grid.
+- **Reset Trip** also clears the map track. The screen is kept awake on the Map page too.
+
 ### Changed
+- **Privacy:** the app now makes network connections, but only in the Map page's Online mode, which you switch on yourself.
+- `libshumate` joins the Fedora package list (optional).
 - The Python package (distribution) is renamed from `neo-m9n-cli` to **`neo-m9n-monitor`**, so wheels are named `neo_m9n_monitor-…whl`. The `m9n` command, the `m9n` import package, the app ID and the install locations are unchanged. If you installed an earlier wheel with pip, run `pip uninstall neo-m9n-cli` first; both provide the same files. `scripts/install-user.py` users need do nothing.
 
 ## 2.0.1 (2026-10-11)

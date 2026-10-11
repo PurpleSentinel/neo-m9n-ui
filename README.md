@@ -4,7 +4,7 @@ A GNOME desktop application (GTK 4 + libadwaita) that tests a SparkFun u-blox NE
 
 ![Session setup and live dashboard](docs/screenshots/setup-dashboard.png)
 
-**Linux only, Python 3.10+, GTK ≥ 4.12, libadwaita ≥ 1.5.** There are no pip runtime packages, cloud services, Arduino, gpsd or u-center. The app targets Fedora Workstation/Server (40 or newer) and runs straight from a checkout. It uses the kernel USB tty, normally `/dev/ttyACM0`.
+**Linux only, Python 3.10+, GTK ≥ 4.12, libadwaita ≥ 1.5.** There are no pip runtime packages, cloud services, Arduino, gpsd or u-center, and **no network connections unless you switch the Map page to Online** (see [Privacy](#privacy)). The app targets Fedora Workstation/Server (40 or newer) and runs straight from a checkout. It uses the kernel USB tty, normally `/dev/ttyACM0`.
 
 The receiver is only sent empty-payload UBX diagnostic polls. The app never changes GNSS configuration, resets the receiver or writes flash, and **Passive** mode sends nothing at all. Which diagnostics are available depends on firmware, USB protocol configuration and antenna supervisor wiring.
 
@@ -47,6 +47,7 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 | Dashboard | Fix status, position, altitude, accuracy, speed, course, DOP, GNSS UTC, sample and epoch-progress age, firmware identity, stream counters and active issues; copy coordinates or the snapshot as JSON |
 | Satellites | Every NAV-SAT satellite: constellation, SV, C/N0, elevation, azimuth, use in solution, signal quality, health; sortable; sky plot |
 | Receiver | MON-RF antenna/jamming/noise/AGC, NAV-STATUS TTFF/uptime/spoofing indication, diagnostic freshness, unanswered and rejected polls |
+| Map | Your live position, accuracy circle and the trip's track: on a coordinate grid with no network (default), or on an OpenStreetMap map you opt into; follows you, with re-centre |
 | Vehicle | For use on the move: a speed gauge, a compass showing the course over ground, distance travelled, average and maximum speed, moving time and an altitude profile, in large colourful instruments that scale to the window; km/h or mph; fullscreen (F11) and the screen kept awake |
 | Messages | Receiver INF/TXT notices and parser errors for the whole session, and the application log (debug: RX/TX hex); filter, search, copy, save |
 | Test | Timed device test with progress and a PASS/WARN/FAIL/INTERRUPTED report you can save and copy |
@@ -59,6 +60,15 @@ Evidence files (all optional, set in the sidebar): an exact **raw RX capture**, 
 ![Vehicle page](docs/screenshots/vehicle.png)
 
 The live views process every incoming frame immediately. Snapshots default to 1 Hz (the **Refresh interval** setting), and NAV-PVT is polled at 1 Hz; faster receiver output is still consumed. A lower refresh interval refreshes the display more often but does not change the receiver's measurement rate. This is a diagnostic tool, not a hard real-time control loop. **Baud rate** only matters for a USB-to-UART adapter; native USB needs no baud search.
+
+## Privacy
+
+The app makes **no network connections** by default. The only exception is the Map page's **Online** mode, which you switch on yourself after a notice explaining what is shared:
+- **Sent to the map provider:** OpenStreetMap's tile servers receive your IP address and which map tiles you view. Zoomed in, the tiles show roughly where you are.
+- **Never sent:** coordinates, your track, receiver identifiers or evidence files.
+- **Only while you're looking:** tiles are requested only for the area on screen, only while the Map page is showing, and never in advance.
+- **Cache:** viewed tiles are cached in `~/.cache/neo-m9n/tiles` (with a size limit and **Clear Map Cache**) and used only while online, as OpenStreetMap's tile policy requires.
+- **Switching off:** switch the map back to Off at any time.
 
 ## Device test results
 

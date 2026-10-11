@@ -45,6 +45,9 @@ class SessionSettings:
     report: bool = True
     pinned: dict = field(default_factory=dict)  # Output kind -> explicit file path.
     units: str = "metric"  # Vehicle page: "metric" or "imperial". Display only.
+    map_mode: str = "off"  # Map page: "off" (grid, no network) or "online" (OpenStreetMap, after consent).
+    map_consented: bool = False  # The user accepted the online map privacy notice.
+    map_cache_mb: int = 200  # Online tile cache limit.
 
     @property
     def effective_mode(self):
@@ -147,6 +150,9 @@ class SessionSettings:
             settings.mode = cls.mode
         if settings.units not in ("metric", "imperial"):
             settings.units = cls.units
+        if settings.map_mode not in ("off", "online") or (settings.map_mode != "off" and not settings.map_consented):
+            settings.map_mode = cls.map_mode  # Never online without recorded consent.
+        settings.map_cache_mb = min(5000, max(20, settings.map_cache_mb))
         return settings
 
     def save(self, path=None):

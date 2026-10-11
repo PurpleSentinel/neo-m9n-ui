@@ -48,7 +48,8 @@ class ShellTests(unittest.TestCase):
 
     def test_window_pages_actions_and_dialogs(self):
         result = self.probe("shell")
-        self.assertEqual(result["pages"], ["dashboard", "satellites", "receiver", "vehicle", "messages", "test", "host"])
+        self.assertEqual(result["pages"], ["dashboard", "satellites", "receiver", "vehicle", "map", "messages", "test",
+                                           "host"])
         self.assertTrue(result["empty_states"])
         self.assertTrue(result["toggle_enabled"])
         self.assertEqual(result["accels"]["app.quit"], ["<Control>q"])
@@ -209,6 +210,92 @@ class VehicleTests(unittest.TestCase):
     def test_phone_width_stacks_the_instruments(self):
         result = self.probe(M9N_FAULT="drive", M9N_PROBE_WIDTH="360")
         self.assertEqual(result["main_orientation"], "vertical")
+
+
+class MapTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "map_page", timeout=40, **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result)
+        self.assertEqual(result["exit"], 0)
+        self.assertFalse(result["overflow"])
+        return result
+
+    def test_off_online_consent_cache_and_policy(self):
+        result = self.probe()
+        self.assertTrue(result["shumate"])
+        # Off by default: a local grid, no HTTP session, nothing requested, even during a live session.
+        self.assertEqual(result["initial"], {"mode": "off", "visible": "content", "sessions": 0, "source": "blank"})
+        live = result["live"]
+        self.assertEqual((live["mode"], live["status"], live["sessions"], live["requests"]), ("off", "Live", 0, 0))
+        self.assertGreaterEqual(live["track"], 2)
+        self.assertIsNotNone(live["fix"][3])  # Moving: the marker is a heading arrow.
+        self.assertEqual(result["marker_offset"], [0.0, 0.0])  # Following keeps the position centred.
+        self.assertEqual((result["after_pan"]["following"], result["after_pan"]["recentre"]), (False, True))
+        self.assertEqual((result["after_recentre"]["following"], result["after_recentre"]["recentre"]), (True, False))
+        # Informed consent; cancelling changes nothing.
+        self.assertEqual(result["consent_heading"], "Use Online Maps?")
+        self.assertTrue(result["consent_mentions"])
+        self.assertEqual((result["after_cancel"]["mode"], result["after_cancel"]["sessions"]), ("off", 0))
+        self.assertFalse(result["consented_after_cancel"])
+        # Online: visible area only, the policy's User-Agent, no no-cache headers, an indicator.
+        online = result["online"]
+        self.assertEqual((online["mode"], online["source"], online["indicator"]), ("online", "osm", True))
+        self.assertTrue(0 < online["requests"] < 100, online["requests"])
+        self.assertEqual(result["user_agents"], ["NEO-M9N-Monitor/2.0.1 (+https://github.com/PurpleSentinel/neo-m9n-ui)"
+                                                 .replace("2.0.1", __import__("m9n").__version__)])
+        self.assertFalse(result["no_cache_sent"])
+        # Revisiting expired tiles revalidates them conditionally; consent is not asked twice.
+        self.assertFalse(result["dialog_second_time"])
+        self.assertGreater(result["second_requests"], 0)
+        self.assertEqual(result["conditional"], result["second_requests"])
+        # Nothing is requested while the page is hidden, or after switching Off.
+        self.assertEqual(result["hidden_requests"], 0)
+        self.assertEqual(result["off_requests"], 0)
+        self.assertEqual((result["off"]["source"], result["off"]["indicator"]), ("blank", False))
+        self.assertRegex(result["cache_usage"], r" in [1-9][0-9]* tiles$")
+        self.assertTrue(result["cache_after_clear"].endswith(" in 0 tiles"))
+        self.assertEqual(result["after_reset"]["track"], 0)
+        self.assertEqual(result["saved"], ["off", True])
+
+    def test_no_fix_dims_the_marker(self):
+        result = self.probe(M9N_FAULT="no-fix")
+        self.assertEqual((result["live"]["status"], result["live"]["dimmed"]), ("No Fix", "No Fix"))
+        self.assertEqual(result["live"]["track"], 0)
+        self.assertIsNone(result["live"]["fix"])
+
+    def test_without_libshumate_the_track_is_drawn_on_a_grid(self):
+        result = self.probe(M9N_NO_SHUMATE="1")
+        self.assertFalse(result["shumate"])
+        self.assertIsNone(result["initial"]["source"])
+        self.assertGreaterEqual(result["live"]["track"], 2)
+        self.assertEqual(result["live"]["sessions"], 0)
+
+    def test_saved_online_mode_is_restored(self):
+        import json
+        settings = Path(self.env["XDG_CONFIG_HOME"]) / "neo-m9n" / "settings.json"
+        settings.parent.mkdir(parents=True, exist_ok=True)
+        settings.write_text(json.dumps({"map_mode": "online", "map_consented": True}))
+        # A dead loopback URL: the restored online map must not reach a real tile server in tests.
+        process, result = run_probe(self.env, "map_restore", M9N_TILE_URL="http://127.0.0.1:9/{z}/{x}/{y}.png")
+        self.assertIsNotNone(result, process.stderr)
+        self.assertEqual((result["mode"], result["indicator"]), ("online", True))
+        self.assertEqual(result["saved"], ["online", True])
+        self.assertEqual(result["saved_later"], "online")
+        settings.unlink()
+
+    def test_phone_width(self):
+        result = self.probe(M9N_PROBE_WIDTH="360", M9N_MAP_QUICK="1")
+        self.assertEqual(result["live"]["status"], "Live")
 
 
 def many_satellites_capture(path, count=35):

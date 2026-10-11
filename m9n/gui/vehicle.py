@@ -516,13 +516,11 @@ class VehiclePage(SessionPage):
 
     def reset_trip(self, _button=None):
         window = self.get_root()
-        runner = getattr(window, "runner", None)
-        if runner and runner.running:
-            runner.reset_trip()
-            self.clear_profile()
-            window.toast("Trip reset")
-        elif hasattr(window, "toast"):
-            window.toast("Start a session to record a trip")
+        if hasattr(window, "reset_trip"):
+            window.reset_trip()
+
+    def trip_reset(self):
+        self.clear_profile()
 
     def set_fullscreen(self, fullscreen):
         self.fullscreen_button.set_icon_name("view-restore-symbolic" if fullscreen else "view-fullscreen-symbolic")

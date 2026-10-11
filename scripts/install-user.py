@@ -76,7 +76,8 @@ def main(argv):
     if "--uninstall" in argv:
         remove(p)
         refresh_caches(p)
-        print("Removed NEO-M9N Monitor. Your settings (~/.config/neo-m9n) and evidence files were left in place.")
+        print("Removed NEO-M9N Monitor. Your settings (~/.config/neo-m9n), cached map tiles (~/.cache/neo-m9n) "
+              "and evidence files were left in place.")
         return 0
     install(p)
     print(f"Installed NEO-M9N Monitor: open it from Activities, or run {p['launcher']}")

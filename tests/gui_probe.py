@@ -56,9 +56,9 @@ def dialog_name(win, action):
 
 def shell(win):
     result["pages"] = page_names(win)
-    # Messages and Host always show content: neither needs a session.
+    # Messages, Map and Host always show content: none needs a session.
     result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage)
-                                 for key, w in win.pages.items() if key not in ("messages", "host"))
+                                 for key, w in win.pages.items() if key not in ("messages", "map", "host"))
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
     from gi.repository import Gdk
@@ -546,6 +546,162 @@ def vehicle(win):
         later(100, app.quit)
 
     later(int(os.environ.get("M9N_WAIT_MS", "3300")), first)
+
+
+def fake_tile_server():
+    """A loopback tile server recording each request's headers; answers revalidation with 304."""
+    import http.server
+    import io
+    import threading
+    import cairo
+    surface = cairo.ImageSurface(cairo.FORMAT_RGB24, 256, 256)
+    context = cairo.Context(surface)
+    context.set_source_rgb(0.85, 0.9, 0.8)
+    context.paint()
+    buffer = io.BytesIO()
+    surface.write_to_png(buffer)
+    png, requests = buffer.getvalue(), []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            etag = f'"{self.path}"'
+            requests.append({"path": self.path, "user_agent": self.headers.get("User-Agent"),
+                             "if_none_match": self.headers.get("If-None-Match"),
+                             "cache_control": self.headers.get("Cache-Control"),
+                             "pragma": self.headers.get("Pragma")})
+            if self.headers.get("If-None-Match") == etag:
+                self.send_response(304)
+                self.send_header("ETag", etag)
+                self.send_header("Cache-Control", "max-age=0")
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "image/png")
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "max-age=0")  # Expire at once, so a revisit revalidates.
+            self.send_header("Content-Length", str(len(png)))
+            self.end_headers()
+            self.wfile.write(png)
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{server.server_address[1]}/{{z}}/{{x}}/{{y}}.png", requests
+
+
+def map_page(win):
+    """Map page: Off by default with no network, track/follow, consent, online tiles, cache, visibility."""
+    from m9n.gui import mappage
+    page = win.pages["map"]
+    sessions = mappage.tiles.SESSIONS_CREATED if mappage.tiles else []
+    result["shumate"] = mappage.Shumate is not None
+    result["initial"] = {"mode": page.mode, "visible": page.stack.get_visible_child_name(), "sessions": len(sessions),
+                         "source": page.simple_map.get_map_source().get_id() if page.simple_map else None}
+    url, requests = fake_tile_server()
+    mappage.TEST_URL = url
+    win.show_page("map")
+    fault = os.environ.get("M9N_FAULT") or "drive"
+    win.start_session(SessionConfig(source="demo", fault=fault))
+
+    def state():
+        return {"mode": page.mode, "status": page.status.get_label(), "dimmed": page.dimmed, "track": len(page.track),
+                "fix": page.fix, "following": page.following, "recentre": page.recentre.get_visible(),
+                "indicator": page.indicator.get_visible(), "sessions": len(sessions), "requests": len(requests),
+                "source": page.simple_map.get_map_source().get_id() if page.simple_map else None}
+
+    def live():
+        result["live"] = state()
+        if page.simple_map and page.fix:
+            x, y = mappage.ShumateProjection(page.simple_map).to_px(*page.fix[:2])
+            result["marker_offset"] = [x - page.simple_map.get_width() / 2, y - page.simple_map.get_height() / 2]
+        width = page.adaptive.get_width()
+        result["overflow"] = page.adaptive.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0] > width
+        if not page.simple_map or os.environ.get("M9N_FAULT") or os.environ.get("M9N_MAP_QUICK"):
+            win.runner.stop()
+            later(100, app.quit)
+            return
+        viewport = page.simple_map.get_viewport()
+        viewport.set_location(viewport.get_latitude() + 0.01, viewport.get_longitude())  # As a user pan.
+        result["after_pan"] = state()
+        page.recentre.emit("clicked")
+        result["after_recentre"] = state()
+        page.mode_buttons["online"].set_active(True)
+        later(300, consent_cancel)
+
+    def consent_cancel():
+        dialog = win.get_visible_dialog()
+        result["consent_heading"] = dialog.get_heading() if dialog else None
+        result["consent_mentions"] = all(word in (dialog.get_body() if dialog else "")
+                                         for word in ("IP address", "Never sent", "~/.cache/neo-m9n/tiles"))
+        if dialog:
+            dialog.force_close()
+            dialog.emit("response", "cancel")
+        result["after_cancel"] = state()
+        result["consented_after_cancel"] = win.setup.settings.map_consented
+        page.mode_buttons["online"].set_active(True)
+        later(300, consent_accept)
+
+    def consent_accept():
+        dialog = win.get_visible_dialog()
+        if dialog:
+            dialog.force_close()
+            dialog.emit("response", "online")
+        later(2500, online)
+
+    def online():
+        result["online"] = state()
+        result["user_agents"] = sorted({r["user_agent"] for r in requests})
+        result["no_cache_sent"] = any(r["cache_control"] or r["pragma"] for r in requests)
+        result["first_requests"] = len(requests)
+        page.set_mode("off")
+        page.mode_buttons["online"].set_active(True)  # Consent is recorded: no dialog this time.
+        later(2500, revalidated)
+
+    def revalidated():
+        second = requests[result["first_requests"]:]
+        result["dialog_second_time"] = win.get_visible_dialog() is not None
+        result["conditional"] = sum(1 for r in second if r["if_none_match"])
+        result["second_requests"] = len(second)
+        win.show_page("dashboard")
+        result["hidden_start"] = len(requests)
+        viewport = page.simple_map.get_viewport()
+        viewport.set_location(viewport.get_latitude() + 0.05, viewport.get_longitude() + 0.05)
+        later(1500, hidden)
+
+    def hidden():
+        result["hidden_requests"] = len(requests) - result["hidden_start"]
+        win.show_page("map")
+        page.set_mode("off")
+        result["off_start"] = len(requests)
+        viewport = page.simple_map.get_viewport()
+        viewport.set_location(viewport.get_latitude() - 0.05, viewport.get_longitude() - 0.05)
+        later(1500, off)
+
+    def off():
+        result["off_requests"] = len(requests) - result["off_start"]
+        result["off"] = state()
+        page.show_usage()
+        result["cache_usage"] = page.cache_usage.get_label()
+        page.clear_cache()
+        result["cache_after_clear"] = page.cache_usage.get_label()
+        win.reset_trip()
+        result["after_reset"] = state()
+        result["saved"] = [win.setup.settings.map_mode, win.setup.settings.map_consented]
+        win.runner.stop()
+        later(100, app.quit)
+
+    later(int(os.environ.get("M9N_WAIT_MS", "3000")), live)
+
+
+def map_restore(win):
+    """A saved, consented Online mode comes back on the next start."""
+    page = win.pages["map"]
+    result["mode"] = page.mode
+    result["indicator"] = page.indicator.get_visible()
+    result["saved"] = [win.setup.settings.map_mode, win.setup.settings.map_consented]
+    later(800, lambda: (result.__setitem__("saved_later", win.setup.settings.map_mode), app.quit()))
 
 
 def layout(win):

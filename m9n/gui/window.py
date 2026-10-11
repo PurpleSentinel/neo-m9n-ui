@@ -16,13 +16,14 @@ from .pages import PAGES, SessionPage
 from .runner import SessionRunner
 from .setup import SetupPanel
 from .testpage import TestPage
+from .mappage import MapPage
 from .vehicle import VehiclePage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
 PROGRESS_MS = 200
 PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
-              "vehicle": VehiclePage, "messages": MessagesPage, "test": TestPage, "host": HostPage}
+              "vehicle": VehiclePage, "map": MapPage, "messages": MessagesPage, "test": TestPage, "host": HostPage}
 
 
 def default_output_dir():
@@ -30,7 +31,7 @@ def default_output_dir():
     return str(Path(documents or Path.home() / "Documents") / "NEO-M9N")
 
 NARROW = "max-width: 600sp"
-COMPACT_SWITCHER = "max-width: 1180sp"  # Seven wide page buttons no longer fit in the header.
+COMPACT_SWITCHER = "max-width: 1320sp"  # Eight wide page buttons no longer fit in the header.
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -120,12 +121,14 @@ class MainWindow(Adw.ApplicationWindow):
         fullscreen = Gio.SimpleAction.new("fullscreen", None)
         fullscreen.connect("activate", lambda *_: self.unfullscreen() if self.is_fullscreen() else self.fullscreen())
         self.add_action(fullscreen)
-        self.connect("notify::fullscreened", lambda *_: self.pages["vehicle"].set_fullscreen(self.is_fullscreen()))
+        self.connect("notify::fullscreened", lambda *_: [self.pages[key].set_fullscreen(self.is_fullscreen())
+                                                         for key in ("vehicle", "map")])
+        self.pages["map"].bind_settings(settings, lambda: self.on_setup_changed(self.setup))
         vehicle = self.pages["vehicle"]
         vehicle.set_units(settings.units)
         vehicle.on_units_changed = self.on_units_changed
         self._idle_cookie = 0
-        self.stack.connect("notify::visible-child-name", lambda *_: self.update_idle_inhibit())
+        self.stack.connect("notify::visible-child-name", lambda *_: self.on_page_shown())
         self.on_setup_changed(self.setup)
         self.connect("close-request", self.on_close_request)
 
@@ -191,9 +194,25 @@ class MainWindow(Adw.ApplicationWindow):
         self.setup.settings.units = units
         self.on_setup_changed(self.setup)
 
+    def on_page_shown(self):
+        visible = self.stack.get_visible_child_name()
+        self.pages["map"].set_page_visible(visible == "map")
+        self.update_idle_inhibit()
+
+    def reset_trip(self):
+        """Start the trip again: distance and speeds in the core, track and profile on the pages."""
+        if not self.runner.running:
+            self.toast("Start a session to record a trip")
+            return
+        self.runner.reset_trip()
+        for page in self.pages.values():
+            if hasattr(page, "trip_reset"):
+                page.trip_reset()
+        self.toast("Trip reset")
+
     def update_idle_inhibit(self):
-        """Keep the screen on while the Vehicle page shows a running session."""
-        wanted = self.runner.running and self.stack.get_visible_child_name() == "vehicle"
+        """Keep the screen on while the Vehicle or Map page shows a running session."""
+        wanted = self.runner.running and self.stack.get_visible_child_name() in ("vehicle", "map")
         if wanted and not self._idle_cookie:
             self._idle_cookie = self.get_application().inhibit(
                 self, Gtk.ApplicationInhibitFlags.IDLE, "Vehicle display in use")
