@@ -46,3 +46,18 @@ class Receiver:
         os.close(self.slave)
         if self.master is not None:
             os.close(self.master)
+
+
+def run_until_finished(controller, wait=0.1):
+    """Blocking stand-in for an event loop: drive a controller until its session ends."""
+    while controller.running:
+        fd = controller.fileno()
+        if fd is not None:
+            poll = select.poll()
+            poll.register(fd, select.POLLIN | select.POLLHUP | select.POLLERR)
+            if poll.poll(int(wait * 1000)):
+                controller.on_readable()
+        elif controller.config.source == "demo":
+            time.sleep(0.05)
+        controller.tick()
+    return controller.result

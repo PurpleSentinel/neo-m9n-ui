@@ -1,20 +1,22 @@
 [build-system]
-requires = ["setuptools>=61"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "neo-m9n-cli"
-version = "1.0.0"
-description = "Fedora USB diagnostics and live monitoring for SparkFun u-blox NEO-M9N GNSS receivers"
+version = "2.0.0"
+description = "GNOME desktop diagnostics and live monitoring for SparkFun u-blox NEO-M9N GNSS receivers over USB"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
+license = "MIT"
+# PyGObject, GTK 4 and libadwaita come from the distribution (dnf install gtk4 libadwaita python3-gobject).
 dependencies = []
-classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3", "Topic :: System :: Hardware"]
+classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3",
+               "Environment :: X11 Applications :: GTK", "Intended Audience :: End Users/Desktop",
+               "Topic :: System :: Hardware"]
 
-[project.scripts]
-m9n = "m9n.cli:main"
+[project.gui-scripts]
+m9n = "m9n.gui.application:main"
 
 [tool.setuptools]
-packages = ["m9n"]
-
+packages = ["m9n", "m9n.gui"]

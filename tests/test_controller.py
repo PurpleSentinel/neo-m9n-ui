@@ -9,10 +9,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 from m9n.controller import (COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED,
-                            SessionConfig, SessionController, run_until_finished, validate)
+                            SessionConfig, SessionController, validate)
 from m9n.demo import sample
 from m9n.transport import SerialPort
-from ptysim import Receiver
+from ptysim import Receiver, run_until_finished
 
 
 def open_fds():
@@ -148,6 +148,14 @@ class ControllerValidationTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "never overwritten"):
                 validate(SessionConfig(raw_log=Path(handle.name)))
 
+    def test_output_paths_must_be_distinct_and_safe(self):
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            validate(SessionConfig(raw_log=Path("same"), json_log=Path("same")))
+        with self.assertRaisesRegex(ValueError, "replay capture"):
+            validate(SessionConfig(source="replay", capture=Path("same"), log_file=Path("same")))
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            validate(SessionConfig(log_file=Path("/dev/null")))
+
     def test_invalid_combinations(self):
         for config in (SessionConfig(mode="test"), SessionConfig(source="replay", mode="test", duration=1),
                        SessionConfig(source="replay"), SessionConfig(fault="rf"),
@@ -256,6 +264,22 @@ class TransportTests(unittest.TestCase):
                 self.assertEqual(port.read(.2), b"last words")
                 with self.assertRaises(OSError):
                     port.read(.2)
+        finally:
+            port.close()
+            os.close(master)
+            os.close(slave)
+
+    def test_read_write_and_exclusive_lock(self):
+        master, slave = pty.openpty()
+        port = SerialPort(os.ttyname(slave))
+        try:
+            os.write(master, b"test")
+            self.assertEqual(port.read(.2), b"test")
+            port.write(b"reply")
+            self.assertEqual(os.read(master, 5), b"reply")
+            self.assertEqual(port.read(.01), b"")
+            with self.assertRaises(OSError):
+                SerialPort(os.ttyname(slave))
         finally:
             port.close()
             os.close(master)
