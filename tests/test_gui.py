@@ -58,17 +58,55 @@ class ShellTests(unittest.TestCase):
         self.assertEqual(result["visible_page"], "host")
         self.assertFalse(result["bottom_switcher"])
         self.assertTrue(result["header_switcher"])
+        self.assertFalse(result["sidebar_collapsed"])
 
     def test_narrow_layout_moves_switcher_to_bottom(self):
         result = self.probe("shell", M9N_PROBE_WIDTH="380")
         self.assertTrue(result["bottom_switcher"])
         self.assertFalse(result["header_switcher"])
+        self.assertTrue(result["sidebar_collapsed"])
 
     def test_second_launch_presents_existing_instance(self):
         result = self.probe("unique")
         self.assertEqual(result["second_exit"], 0)
         self.assertEqual(result["activations"], 2)
         self.assertEqual(result["windows"], 1)
+
+
+class SetupTests(unittest.TestCase):
+    def test_setup_drives_a_session_and_persists(self):
+        with headless_display() as env, tempfile.TemporaryDirectory() as out:
+            folder = Path(out) / "evidence"  # Missing: created when the session starts.
+            saved = Path(env["XDG_CONFIG_HOME"]) / "neo-m9n" / "settings.json"
+            saved.parent.mkdir(parents=True)
+            saved.write_text(json.dumps({"source": "demo", "fault": "rf", "mode": "test", "test_duration": 1.5,
+                                         "json_log": True, "log_file": True, "report": True,
+                                         "raw_log": True, "output_dir": str(folder)}))
+            process, result = run_probe(env, "setup")
+            self.assertIsNotNone(result, process.stderr)
+            self.assertNotIn("timeout", result, process.stderr)
+            self.assertEqual(result["demo_rows"], {"device": False, "fault": True, "raw": False,
+                                                   "report": True, "receiver": False})
+            self.assertTrue(result["valid_demo"])
+            invalid = result["replay_invalid"]
+            self.assertFalse(invalid["enabled"])
+            self.assertTrue(invalid["capture_error"])
+            self.assertIn("capture file", invalid["message"])
+            self.assertFalse(invalid["mode_visible"])
+            self.assertTrue(result["valid_again"])
+            self.assertTrue(result["sidebar_hidden"])
+            self.assertTrue(result["running"])
+            self.assertFalse(result["sensitive_while_running"])
+            self.assertEqual(result["config"], {"mode": "test", "fault": "rf", "interval": .5})
+            self.assertEqual(result["reason"], "completed")
+            self.assertEqual(result["status"], "WARN")
+            self.assertTrue(result["sensitive_after"])
+            names = sorted(p.name for p in folder.iterdir())
+            self.assertEqual(len(names), 3, names)  # No raw capture for a demo source.
+            self.assertTrue(all(n.startswith("m9n-") for n in names))
+            self.assertEqual(sorted(n.split(".", 1)[1] for n in names), ["json", "jsonl", "log"])
+            self.assertTrue(any(n.endswith("-report.json") for n in names))
+            self.assertEqual(json.loads(saved.read_text())["interval"], .5)
 
 
 class LifecycleTests(unittest.TestCase):

@@ -82,49 +82,60 @@ def same_file(a, b):
         return False
 
 
-def validate(config):
-    """Reject a configuration before anything is opened or created."""
+OUTPUT_FIELDS = ("raw_log", "json_log", "log_file", "report")
+
+
+def problems(config):
+    """Yield (field, message) for everything that would stop the session starting."""
     if config.source not in SOURCES:
-        raise ValueError(f"Unknown source: {config.source}")
+        yield "source", f"Unknown source: {config.source}"
+        return
     if config.mode not in MODES:
-        raise ValueError(f"Unknown mode: {config.mode}")
+        yield "mode", f"Unknown mode: {config.mode}"
+        return
     for name in ("interval", "stale_after"):
         value = getattr(config, name)
         if not math.isfinite(value) or value <= 0:
-            raise ValueError(f"{name} must be a finite number greater than zero")
+            yield name, f"{name} must be a finite number greater than zero"
     if not math.isfinite(config.duration) or config.duration < 0:
-        raise ValueError("duration must be a finite non-negative number")
+        yield "duration", "duration must be a finite non-negative number"
     if config.mode == "test":
         if config.source == "replay":
-            raise ValueError("A device test needs a live or demo source, not a replay")
-        if not config.duration:
-            raise ValueError("test --duration must be greater than zero")
+            yield "mode", "A device test needs a live or demo source, not a replay"
+        elif not config.duration:
+            yield "duration", "test --duration must be greater than zero"
     elif config.report is not None:
-        raise ValueError("A test report is only written in test mode")
+        yield "report", "A test report is only written in test mode"
     if config.source == "replay" and config.capture is None:
-        raise ValueError("Replay needs a capture file")
+        yield "capture", "Replay needs a capture file"
     if config.fault is not None and (config.source != "demo" or config.fault not in FAULTS):
-        raise ValueError(f"Fault {config.fault!r} is only available for the demo source")
+        yield "fault", f"Fault {config.fault!r} is only available for the demo source"
     if config.raw_log is not None and config.source != "device":
-        raise ValueError("Raw RX capture is only available for a USB device source")
-    outputs = config.outputs()
-    for i, path in enumerate(outputs):
+        yield "raw_log", "Raw RX capture is only available for a USB device source"
+    outputs = [(name, getattr(config, name)) for name in OUTPUT_FIELDS if getattr(config, name) is not None]
+    for i, (name, path) in enumerate(outputs):
         if path.exists() and not path.is_file():
-            raise ValueError(f"Output must be a regular file, not a device or directory: {path}")
-        for other in outputs[i + 1:]:
+            yield name, f"Output must be a regular file, not a device or directory: {path}"
+        for _, other in outputs[i + 1:]:
             if same_file(path, other):
-                raise ValueError("Each output must have a distinct file path")
+                yield name, "Each output must have a distinct file path"
         if config.capture is not None and same_file(path, config.capture):
-            raise ValueError("Output path must not overwrite the replay capture")
+            yield name, "Output path must not overwrite the replay capture"
         if config.port and same_file(path, Path(config.port)):
-            raise ValueError("Output path must not be the serial device")
+            yield name, "Output path must not be the serial device"
         parent = path.parent
         if not parent.is_dir():
-            raise ValueError(f"Output directory does not exist: {parent}")
-        if not os.access(parent, os.W_OK | os.X_OK) and not os.access(path, os.W_OK):
-            raise ValueError(f"Output directory is not writable: {parent}")
+            yield name, f"Output directory does not exist: {parent}"
+        elif not os.access(parent, os.W_OK | os.X_OK) and not os.access(path, os.W_OK):
+            yield name, f"Output directory is not writable: {parent}"
     if config.raw_log is not None and config.raw_log.exists():
-        raise ValueError(f"Raw capture already exists and is never overwritten: {config.raw_log}")
+        yield "raw_log", f"Raw capture already exists and is never overwritten: {config.raw_log}"
+
+
+def validate(config):
+    """Reject a configuration before anything is opened or created."""
+    for _field, message in problems(config):
+        raise ValueError(message)
 
 
 class SessionController:

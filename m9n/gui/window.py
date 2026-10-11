@@ -1,10 +1,23 @@
 """Main window: header bar, adaptive page switcher, banner, toasts and session control."""
-from gi.repository import Adw, Gio, GLib, Gtk
+import logging
+from pathlib import Path
 
-from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED, SessionConfig
+from gi.repository import Adw, Gio, GLib, GObject, Gtk
+
+from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
 from ..serialize import safe
+from ..settings import SessionSettings
 from .pages import PAGES, empty_page
 from .runner import SessionRunner
+from .setup import SetupPanel
+
+LOG = logging.getLogger("m9n")
+SAVE_DELAY_MS = 500
+
+
+def default_output_dir():
+    documents = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS)
+    return str(Path(documents or Path.home() / "Documents") / "NEO-M9N")
 
 NARROW = "max-width: 600sp"
 
@@ -30,8 +43,17 @@ class MainWindow(Adw.ApplicationWindow):
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, primary=True,
                                      tooltip_text="Main Menu")
 
+        settings = SessionSettings.load()
+        settings.output_dir = settings.output_dir or default_output_dir()
+        self.setup = SetupPanel(settings)
+        self.setup.connect("changed", self.on_setup_changed)
+        self._save_source = 0
+
         self.switcher = switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header = Adw.HeaderBar(title_widget=switcher)
+        self.sidebar_button = Gtk.ToggleButton(icon_name="sidebar-show-symbolic", active=True,
+                                               tooltip_text="Session Setup (F9)")
+        header.pack_start(self.sidebar_button)
         header.pack_start(self.session_button)
         header.pack_end(menu_button)
 
@@ -39,7 +61,11 @@ class MainWindow(Adw.ApplicationWindow):
         self.switcher_bar = switcher_bar = Adw.ViewSwitcherBar(stack=self.stack)
         self.toasts = Adw.ToastOverlay(child=self.stack)
 
-        toolbar = Adw.ToolbarView(content=self.toasts)
+        self.split = Adw.OverlaySplitView(sidebar=self.setup, content=self.toasts,
+                                          min_sidebar_width=300, max_sidebar_width=380)
+        self.split.bind_property("show-sidebar", self.sidebar_button, "active",
+                                 GObject.BindingFlags.BIDIRECTIONAL | GObject.BindingFlags.SYNC_CREATE)
+        toolbar = Adw.ToolbarView(content=self.split)
         toolbar.add_top_bar(header)
         toolbar.add_top_bar(self.banner)
         toolbar.add_bottom_bar(switcher_bar)
@@ -49,6 +75,8 @@ class MainWindow(Adw.ApplicationWindow):
         breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(NARROW))
         breakpoint.add_setter(switcher_bar, "reveal", True)
         breakpoint.add_setter(switcher, "visible", False)
+        breakpoint.add_setter(self.split, "collapsed", True)
+        breakpoint.add_setter(self.split, "show-sidebar", False)
         self.add_breakpoint(breakpoint)
 
         self.runner = SessionRunner()
@@ -56,9 +84,13 @@ class MainWindow(Adw.ApplicationWindow):
         self.runner.connect("finished", self.on_finished)
         self._inhibit_cookie = 0
         self._close_after_stop = False
-        toggle = Gio.SimpleAction.new("toggle-session", None)
-        toggle.connect("activate", self.toggle_session)
-        self.add_action(toggle)
+        self.toggle_action = Gio.SimpleAction.new("toggle-session", None)
+        self.toggle_action.connect("activate", self.toggle_session)
+        self.add_action(self.toggle_action)
+        sidebar = Gio.SimpleAction.new("toggle-sidebar", None)
+        sidebar.connect("activate", lambda *_: self.split.set_show_sidebar(not self.split.get_show_sidebar()))
+        self.add_action(sidebar)
+        self.on_setup_changed(self.setup)
         self.connect("close-request", self.on_close_request)
 
     def show_page(self, key):
@@ -82,14 +114,34 @@ class MainWindow(Adw.ApplicationWindow):
     # Session control -----------------------------------------------------
 
     def session_config(self):
-        """The configuration Start uses; the setup page replaces this (#6)."""
-        return SessionConfig()
+        """Configuration for Start: creates the evidence folder if this session needs it."""
+        self.setup.settings.prepare_outputs()
+        return self.setup.settings.to_config()
 
     def toggle_session(self, *_):
         if self.runner.running:
             self.runner.stop(USER_STOPPED)
-        else:
-            self.start_session(self.session_config())
+            return
+        try:
+            config = self.session_config()
+        except OSError as exc:
+            self.alert("Session Could Not Start", f"The evidence folder could not be created: {exc}")
+            return
+        self.start_session(config)
+
+    def on_setup_changed(self, setup):
+        self.toggle_action.set_enabled(self.runner.running or setup.valid)
+        if self._save_source:
+            GLib.source_remove(self._save_source)
+        self._save_source = GLib.timeout_add(SAVE_DELAY_MS, self.save_settings)
+
+    def save_settings(self):
+        self._save_source = 0
+        try:
+            self.setup.settings.save()
+        except OSError as exc:
+            LOG.warning("Settings not saved: %s", exc)
+        return GLib.SOURCE_REMOVE
 
     def start_session(self, config):
         try:
@@ -100,6 +152,8 @@ class MainWindow(Adw.ApplicationWindow):
         return True
 
     def on_started(self, runner):
+        self.setup.set_sensitive(False)
+        self.toggle_action.set_enabled(True)
         self.session_button.set_label("Stop")
         self.session_button.remove_css_class("suggested-action")
         self.session_button.add_css_class("destructive-action")
@@ -112,6 +166,8 @@ class MainWindow(Adw.ApplicationWindow):
             "GNSS session in progress")
 
     def on_finished(self, runner, result):
+        self.setup.set_sensitive(True)
+        self.setup.refresh()  # A pinned raw capture now exists, for example.
         self.session_button.set_label("Start")
         self.session_button.remove_css_class("destructive-action")
         self.session_button.add_css_class("suggested-action")
@@ -132,6 +188,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def on_close_request(self, _window):
         if not self.runner.running:
+            if self._save_source:
+                GLib.source_remove(self._save_source)
+                self.save_settings()
             return False
         testing = self.runner.config.mode == "test"
         dialog = Adw.AlertDialog(

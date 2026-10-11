@@ -59,6 +59,7 @@ def shell(win):
     def layout():
         result["bottom_switcher"] = win.switcher_bar.get_reveal()
         result["header_switcher"] = win.switcher.get_visible()
+        result["sidebar_collapsed"] = win.split.get_collapsed()
         app.activate_action("quit", None)
     later(400, layout)
 
@@ -137,6 +138,36 @@ def lifecycle(win):
             later(500, lambda: (result.update(error_dialog=type(win.get_visible_dialog()).__name__), app.quit()))
     if trigger not in ("unplug", "complete"):
         later(800, act)
+
+
+def setup(win):
+    panel = win.setup
+    visible = lambda row: row.get_visible()  # noqa: E731
+    result["demo_rows"] = {"device": visible(panel.device_row), "fault": visible(panel.fault_row),
+                           "raw": visible(panel.output_rows["raw_log"]), "report": visible(panel.output_rows["report"]),
+                           "receiver": visible(panel.receiver_group)}
+    result["valid_demo"] = win.toggle_action.get_enabled()
+    panel.source_row.set_selected(2)  # Replay without a capture file.
+    result["replay_invalid"] = {"enabled": win.toggle_action.get_enabled(),
+                                "capture_error": panel.capture_row.has_css_class("error"),
+                                "message": panel.problem_label.get_label(), "mode_visible": visible(panel.mode_row)}
+    panel.source_row.set_selected(1)
+    panel.interval_row.set_value(.5)
+    result["valid_again"] = win.toggle_action.get_enabled()
+    win.activate_action("win.toggle-sidebar", None)
+    result["sidebar_hidden"] = not win.split.get_show_sidebar()
+    win.activate_action("win.toggle-sidebar", None)
+
+    def finished(_runner, outcome):
+        result.update(reason=outcome.reason, status=outcome.report["status"],
+                      sensitive_after=panel.get_sensitive())
+        later(700, app.quit)  # Past the save delay, so settings reach disk.
+    win.runner.connect("finished", finished)
+    win.activate_action("win.toggle-session", None)
+    result["running"] = win.runner.running
+    result["sensitive_while_running"] = panel.get_sensitive()
+    result["config"] = {"mode": win.runner.config.mode, "fault": win.runner.config.fault,
+                        "interval": win.runner.config.interval}
 
 
 def on_activate(_app):
