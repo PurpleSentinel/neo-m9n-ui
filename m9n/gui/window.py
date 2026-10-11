@@ -14,11 +14,12 @@ from .satellites import SatellitesPage
 from .pages import PAGES, SessionPage
 from .runner import SessionRunner
 from .setup import SetupPanel
+from .testpage import TestPage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
 PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
-              "messages": MessagesPage}
+              "messages": MessagesPage, "test": TestPage}
 
 
 def default_output_dir():
@@ -98,6 +99,9 @@ class MainWindow(Adw.ApplicationWindow):
         self.toggle_action = Gio.SimpleAction.new("toggle-session", None)
         self.toggle_action.connect("activate", self.toggle_session)
         self.add_action(self.toggle_action)
+        self.run_test_action = Gio.SimpleAction.new("run-test", None)
+        self.run_test_action.connect("activate", self.run_test)
+        self.add_action(self.run_test_action)
         sidebar = Gio.SimpleAction.new("toggle-sidebar", None)
         sidebar.connect("activate", lambda *_: self.split.set_show_sidebar(not self.split.get_show_sidebar()))
         self.add_action(sidebar)
@@ -142,8 +146,22 @@ class MainWindow(Adw.ApplicationWindow):
             return
         self.start_session(config)
 
+    def run_test(self, *_):
+        """Switch the setup to a device test and start it, or show why it cannot start."""
+        settings = self.setup.settings
+        if settings.source == "replay":
+            settings.source = "device"
+        settings.mode = "test"
+        self.setup.load()
+        if not self.setup.valid:
+            self.split.set_show_sidebar(True)
+            self.alert("Device Test Could Not Start", next(iter(self.setup.problems.values())))
+            return
+        self.toggle_session()
+
     def on_setup_changed(self, setup):
         self.toggle_action.set_enabled(self.runner.running or setup.valid)
+        self.run_test_action.set_enabled(not self.runner.running)
         if self._save_source:
             GLib.source_remove(self._save_source)
         self._save_source = GLib.timeout_add(SAVE_DELAY_MS, self.save_settings)
@@ -181,6 +199,7 @@ class MainWindow(Adw.ApplicationWindow):
             page.session_started(runner.config)
         self.setup.set_sensitive(False)
         self.toggle_action.set_enabled(True)
+        self.run_test_action.set_enabled(False)
         self.session_button.set_label("Stop")
         self.session_button.remove_css_class("suggested-action")
         self.session_button.add_css_class("destructive-action")
@@ -200,6 +219,9 @@ class MainWindow(Adw.ApplicationWindow):
         self._issue_toasts.clear()
         self.setup.set_sensitive(True)
         self.setup.refresh()  # A pinned raw capture now exists, for example.
+        self.run_test_action.set_enabled(True)
+        if result.report and not self._close_after_stop:
+            self.show_page("test")
         self.session_button.set_label("Start")
         self.session_button.remove_css_class("destructive-action")
         self.session_button.add_css_class("suggested-action")
