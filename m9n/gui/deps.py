@@ -2,7 +2,8 @@
 MIN_PYGOBJECT = (3, 46)
 MIN_GTK = (4, 12)
 MIN_ADW = (1, 5)
-INSTALL_HINT = "Install the desktop runtime with: sudo dnf install gtk4 libadwaita python3-gobject"
+INSTALL_HINT = ("Install the desktop runtime with: "
+                "sudo dnf install gtk4 libadwaita python3-gobject gobject-introspection")
 
 
 def version(parts):

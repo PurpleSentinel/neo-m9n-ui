@@ -9,7 +9,8 @@ description = "GNOME desktop diagnostics and live monitoring for SparkFun u-blox
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-# PyGObject, GTK 4 and libadwaita come from the distribution (dnf install gtk4 libadwaita python3-gobject).
+# PyGObject, GTK 4 and libadwaita come from the distribution
+# (dnf install gtk4 libadwaita python3-gobject gobject-introspection).
 dependencies = []
 classifiers = ["Operating System :: POSIX :: Linux", "Programming Language :: Python :: 3",
                "Environment :: X11 Applications :: GTK", "Intended Audience :: End Users/Desktop",

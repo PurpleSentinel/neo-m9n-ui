@@ -12,7 +12,7 @@ The command-line interface is replaced by a GTK 4 / libadwaita desktop applicati
   - the raw RX capture and the application log
   
   The Host page saves the `doctor --json` document. A headless front end could be rebuilt on `m9n.controller.SessionController` if needed.
-- The runtime now needs PyGObject ≥ 3.46, GTK ≥ 4.12 and libadwaita ≥ 1.5 (Fedora 40+: `sudo dnf install gtk4 libadwaita python3-gobject`). There are still no pip dependencies.
+- The runtime now needs PyGObject ≥ 3.46, GTK ≥ 4.12 and libadwaita ≥ 1.5 (Fedora 40+: `sudo dnf install gtk4 libadwaita python3-gobject gobject-introspection`). There are still no pip dependencies.
 - `m9n --version` remains for packaging checks.
 
 ### Fixed
