@@ -83,7 +83,7 @@ Without a valid, current fix the instruments dim and say **No Fix**, **Stale** o
 
 ![Map page](screenshots/map.png)
 
-Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. **Reset Trip** (here or on the Vehicle page) clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
+Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. **Reset Trip** on the Vehicle page clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
 
 Choose how the map is drawn at the top of the page:
 - **Off** (default): the position and track on a coordinate grid, with a scale bar. Nothing leaves your computer.
