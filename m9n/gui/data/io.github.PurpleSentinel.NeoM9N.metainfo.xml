@@ -31,6 +31,28 @@
   <url type="homepage">https://github.com/PurpleSentinel/neo-m9n-ui</url>
   <url type="bugtracker">https://github.com/PurpleSentinel/neo-m9n-ui/issues</url>
   <content_rating type="oars-1.1"/>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://raw.githubusercontent.com/PurpleSentinel/neo-m9n-ui/main/docs/screenshots/setup-dashboard.png</image>
+      <caption>Session setup and the live dashboard</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PurpleSentinel/neo-m9n-ui/main/docs/screenshots/satellites.png</image>
+      <caption>Satellite table and sky plot</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PurpleSentinel/neo-m9n-ui/main/docs/screenshots/test.png</image>
+      <caption>Device test result</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PurpleSentinel/neo-m9n-ui/main/docs/screenshots/receiver.png</image>
+      <caption>RF, antenna and receiver status</caption>
+    </screenshot>
+    <screenshot>
+      <image>https://raw.githubusercontent.com/PurpleSentinel/neo-m9n-ui/main/docs/screenshots/host.png</image>
+      <caption>Host diagnostics</caption>
+    </screenshot>
+  </screenshots>
   <requires>
     <display_length compare="ge">360</display_length>
   </requires>

@@ -1,6 +1,10 @@
 # Architecture
 
-The application is a single-process Python CLI that owns one Linux tty for a session. It immediately parses received UBX/NMEA frames and refreshes a terminal or JSON snapshot periodically. It has no daemon, API server, cloud dependency or background storage service.
+NEO-M9N Monitor is a single-process, single-threaded GTK 4 / libadwaita application (PyGObject) that owns one Linux tty per session. It parses received UBX/NMEA frames as they arrive and publishes a snapshot to the pages at the refresh interval. It has no daemon, API server, cloud dependency or background storage service.
+
+The code is split into a GTK-free core, which can be unit-tested without a display, and the `gui` package, which only presents the core's state and starts and stops sessions.
+
+### Core (`m9n/`)
 
 | Module | Responsibility |
 | --- | --- |
@@ -11,13 +15,25 @@ The application is a single-process Python CLI that owns one Linux tty for a ses
 | `state.py` | Latest messages, frame/message counts, monotonic freshness/epoch progress, health checks and reports |
 | `controller.py` | UI-independent session lifecycle: configuration validation, source (device/demo/replay), evidence files, snapshot/issue callbacks, ordered stop and guaranteed tty release |
 | `serialize.py` | Control-character escaping and JSON serialization shared by front ends |
-| `display.py` | Plain/ANSI terminal rendering |
-| `cli.py` | Commands, host diagnostics, console logging, interruption handling and exit codes; drives `controller.py` |
+| `settings.py` | Persisted session settings (`~/.config/neo-m9n/settings.json`), timestamped evidence names, per-setting validation problems |
 | `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests |
+
+### Desktop front end (`m9n/gui/`)
+
+| Module | Responsibility |
+| --- | --- |
+| `application.py`, `deps.py` | Entry point; checks PyGObject/GTK/libadwaita versions before any Gtk import |
+| `app.py` | Single-instance `Adw.Application`: actions, accelerators, signal and exception handling, shutdown backstop, icons |
+| `window.py` | Main window: header bar, adaptive page switcher, setup sidebar, banner, progress, toasts, session control, close confirmation |
+| `runner.py` | Drives `SessionController` from the GLib main loop (fd watch + tick) and re-emits its events as GObject signals |
+| `setup.py` | Session setup sidebar mirroring `SessionSettings` |
+| `pages.py`, `format.py` | Page registry and base class (empty state until data); GTK-free value formatting |
+| `dashboard.py`, `satellites.py`, `receiver.py`, `messages.py`, `logview.py`, `testpage.py`, `host.py` | The six pages and the shared bounded log list |
+| `data/` | Desktop entry, AppStream metainfo and icons (also used from a checkout) |
 
 ## Session lifecycle
 
-`SessionController` owns one session. A front end calls `on_readable()` when the tty fd is readable and `tick()` about every 100 ms; `run_until_finished()` provides that loop for the CLI. The device is opened before any evidence file is created, and every output path is validated up front. `stop()` always runs the same order: close the tty (restore termios, clear `TIOCEXCL`, release the lock), build the report or final snapshot, then write the report file, append the final JSONL record and close every file. The result is held in memory before any disk write, so a failing disk cannot discard a completed test. Tty writes are queued and never block the caller; an overdue write is a transport failure.
+`SessionController` owns one session. A front end calls `on_readable()` when the tty fd is readable and `tick()` about every 100 ms, and receives snapshots, issue changes, receiver messages and the final result through callbacks. The device is opened before any evidence file is created, and every output path is validated up front. `stop()` always runs the same order: close the tty (restore termios, clear `TIOCEXCL`, release the lock), build the report or final snapshot, then write the report file, append the final JSONL record and close every file. The result is held in memory before any disk write, so a failing disk cannot discard a completed test. Tty writes are queued and never block the caller; an overdue write is a transport failure.
 
 ## Desktop application lifecycle
 
@@ -48,7 +64,7 @@ The port is opened nonblocking with read/write access, an advisory lock and kern
 | NAV-STATUS | 2 s | Receiver uptime, TTFF and spoof detector state |
 | MON-RF | 5 s | RF blocks, antenna supervisor and interference information |
 
-Polls have empty payloads. No CFG, reset, firmware update, output-rate or configuration-save commands are sent. `--passive` bypasses the poll scheduler. The app never automatically re-enables UBX if someone disabled it on the device; it explains why diagnostics may be unavailable instead.
+Polls have empty payloads. No CFG, reset, firmware update, output-rate or configuration-save commands are sent. The **Passive** setting bypasses the poll scheduler. The app never automatically re-enables UBX if someone disabled it on the device; it explains why diagnostics may be unavailable instead.
 
 Each outstanding poll has a 1.5-second response deadline. A matching received message satisfies it, including periodic output. Unanswered polls increment counters and generate a warning on the transition to unavailable; recovery is logged. ACK-NAK marks a target unavailable and stops repeating that target's poll for the session. A normal poll response is an actual message, not an ACK requirement.
 
@@ -68,8 +84,12 @@ Navigation/satellite/status freshness defaults to 5 seconds; RF freshness uses 1
 
 ## Output and failure handling
 
-Interactive terminals get ANSI redraw; pipes get plain text unless `--json` is selected. Receiver text is sanitized before terminal rendering. JSON always escapes control characters. Snapshot files flush each interval; raw RX files flush each read. Debug logs include RX/TX hex and parsed values. INF/TXT messages are captured if the firmware is already emitting them; the app does not configure firmware to enable additional internal debug output.
+Receiver text is shown as plain text, never as markup, with control characters escaped. JSON always escapes control characters. Snapshot files flush each interval; raw RX files flush each read. Debug logs include RX/TX hex and parsed values. INF/TXT messages are captured if the firmware is already emitting them; the app does not configure firmware to enable additional internal debug output.
 
-`test --json` prints one final object. Receiver silence/corruption and GNSS fix availability are separate checks. Transport errors after the test opens the port are included in a final FAIL report. Local setup failures before the session starts return an actionable stderr error. Ctrl-C releases the tty and restores the terminal cursor.
+A device test produces one final report, shown on the Test page and optionally written to the report file and the JSONL log. Receiver silence/corruption and GNSS fix availability are separate checks. Transport errors after the test opens the port are included in a final FAIL report. Setup failures before the session starts (invalid settings, a missing or busy device) are shown in the window and create no evidence files. The application log is mirrored to stderr at warning level for terminal launches.
 
-No reconnect is attempted automatically. A device reconnect may appear as a different tty; use `list` or a persistent `/dev/serial/by-id/` path and start another session.
+No reconnect is attempted automatically. A device reconnect may appear as a different tty; the setup sidebar lists receivers by their persistent `/dev/serial/by-id/` names, so start another session from there.
+
+## Tests
+
+`tests/` covers the protocol, state, controller (real PTYs), settings, host inventory, installer and packaging metadata without a display. `tests/test_gui.py` runs GUI scenarios from `tests/gui_probe.py` in subprocesses on a private Broadway display and D-Bus session, so nothing touches a real desktop. They check widget state, device release (`/proc/self/fd`), evidence files and main-loop responsiveness. CI runs everything on Fedora (with `M9N_REQUIRE_GUI=1`, so GUI tests cannot silently skip) and the core suite on Python 3.10–3.13.

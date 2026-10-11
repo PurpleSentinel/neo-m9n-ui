@@ -47,6 +47,6 @@ Every snapshot has `schema_version`, `kind: snapshot`, host UTC, elapsed monoton
 
 Counter keys are sparse: absent means zero, not unsupported. Missing position/diagnostic values are null or absent, never fabricated zeroes. Use `fix_ok && fresh` before treating coordinates as current. Diagnostic arrays can retain old values, so check their ages before using them. Frozen PVT retains old coordinates with `fresh: false`.
 
-Reports have `kind: test_report`, `status`, `exit_code`, an array of named `checks` (status/detail), and a final `snapshot`. `test --json` emits one report; `--json-log` includes interval snapshots and a final report. Applications should check both record kind and schema version.
+Reports have `kind: test_report`, `status`, `exit_code`, an array of named `checks` (status/detail), and a final `snapshot`. `exit_code` keeps the 1.x meaning (0 PASS, 2 WARN, 1 FAIL, 130 INTERRUPTED) for tools that already read it. The report file holds one report. The JSONL log holds a snapshot per refresh interval and then the final report (device tests) or final snapshot (watch and demo); a replay writes only its final snapshot. Applications should check both record kind and schema version. The Host page's *Save as JSON* writes the host diagnostics document (the 1.x `doctor --json` format).
 
 Machine logs include location and receiver identifiers. Receiver debug text is escaped in JSON. Raw RX files contain no wrapper/header and can be inspected by another UBX/NMEA parser; they exclude transmitted polls and contain no timing metadata.

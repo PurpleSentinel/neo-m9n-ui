@@ -1,0 +1,115 @@
+# User guide
+
+NEO-M9N Monitor has a **session setup sidebar** (F9) and six pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
+
+## Keyboard shortcuts
+
+| Keys | Action |
+| --- | --- |
+| F5 | Start or stop the session |
+| Ctrl+T | Run a device test |
+| F9 | Show or hide session setup |
+| Ctrl+? | Keyboard shortcuts |
+| Ctrl+Q | Quit (asks first while a session runs) |
+
+## Session setup
+
+| Group | Setting | Notes |
+| --- | --- | --- |
+| Source | **Source** | USB receiver, Synthetic demo or Replay capture |
+| | **Receiver** | *Automatic* picks the single u-blox (VID 1546) tty and refuses to guess between several. Discovered devices are listed by their stable `/dev/serial/by-id/` name and rescanned every 2 s. *Other path…* accepts any tty path, such as the PTY simulator. |
+| | **Simulated fault** | Demo only: no fix, RF alarm, corrupt frames, frozen epochs, silent receiver |
+| | **Capture file** | Replay only: a raw RX capture (exact bytes, mixed UBX and NMEA) |
+| Session | **Mode** | *Watch* until stopped, or *Device test* |
+| | **Duration** | Watch: seconds, 0 = until stopped. Device test: seconds observed (default 60). |
+| Receiver | **Baud rate** | termios line setting; only matters for a USB-to-UART adapter. It does not configure the receiver. |
+| | **Passive** | Listen only; send no diagnostic polls |
+| Timing | **Refresh interval** | Seconds between snapshots (default 1); not the receiver's measurement rate |
+| | **Stale after** | Navigation is stale when nothing new arrives, or the epoch stops advancing, for this long (default 5 s) |
+| Evidence Files | **Folder** | Where timestamped files go; default `Documents/NEO-M9N`, created when needed |
+| | **Raw RX capture** | Exact received bytes, flushed per read, never overwritten (USB source only) |
+| | **JSONL snapshot log** | One JSON snapshot per refresh plus the final snapshot or test report; appends |
+| | **Application log** | The application log at the chosen verbosity; appends |
+| | **Test report** | Final JSON report (device tests only); replaces |
+| | **Debug logging** | Adds RX/TX hex and every decoded message to the application log |
+
+Each output is named `m9n-YYYYmmdd-HHMMSS.ubx` / `.jsonl` / `.log` / `-report.json` in the folder. The save button on its row pins it to a specific file instead, for example to keep appending to one JSONL file; the clear button returns to timestamped names. Settings are saved to `~/.config/neo-m9n/settings.json`.
+
+Invalid settings are marked on their row, the reason is shown under the form and **Start stays disabled**. Examples: a replay without a file, a pinned file in a missing folder, an existing raw capture, two outputs sharing a path. The sidebar is locked while a session runs.
+
+## Dashboard
+
+The current fix in large type: **Valid Fix**, **Stale Navigation**, **No Fix** or **Waiting for Navigation**, always with an icon and text rather than colour alone. Below it:
+- **Active issues** (also shown briefly as notifications when they appear)
+- position, motion, dilution of precision, time
+- receiver identity (MON-VER), session details and stream counters
+
+Values the receiver hasn't provided read *unknown*; they are never guessed. Copy the coordinates, or the whole snapshot as JSON, with the copy buttons.
+
+![Narrow window](screenshots/narrow.png)
+
+## Satellites
+
+Every satellite from NAV-SAT. By default used satellites come first, then the strongest C/N0; click a column header to sort by it. Scrolling and selection survive each refresh. The sky plot shows azimuth/elevation with used satellites filled in. Satellites whose position the receiver reports as unknown are listed but not plotted. If NAV-SAT is unanswered or rejected, the page says so; that is not evidence of a hardware fault.
+
+## Receiver
+
+![Receiver diagnostics](screenshots/receiver.png)
+
+- **MON-RF:** antenna status and power, jamming state, CW suppression, noise, AGC and POST status. Antenna supervision depends on how the board wires it, so OPEN/SHORT are indications, not proof of a fault. If the jamming monitor reports state 0 (unknown or disabled), the page explains that a device test will report RF health as WARN.
+- **NAV-STATUS:** TTFF, receiver uptime, spoofing detector (an indication only).
+- **Freshness:** time since each diagnostic message last arrived, unanswered polls and rejected polls.
+
+## Messages
+
+- **Receiver Messages:** INF and NMEA TXT notices, rejected polls and parser errors for the whole session.
+- **Application Log:** what the app did. With debug logging this includes the raw RX/TX hex.
+
+Both lists filter by level and search text, keep the newest 5,000 lines, and follow new lines until you scroll up. *Copy* and *Save…* use the visible lines.
+
+## Test
+
+**Run Device Test** (Ctrl+T) switches the setup to a device test and starts it; if the setup is invalid it opens the sidebar and explains why. While it runs you see progress and time remaining, and **Cancel Test** records INTERRUPTED. The result lists every check with its detail. See the result table in the [README](../README.md#device-test-results).
+
+The report is never lost. The page shows where it was saved; if no report file was configured, or writing it failed, **Save Report…** writes it now. **Copy report JSON** is always available. The window switches to this page when a test finishes.
+
+## Host
+
+![Host diagnostics](screenshots/host.png)
+
+Read-only host checks, run when you first open the page and again with Refresh:
+- the selected port, read/write access, the `cdc_acm` driver, processes holding the port, gpsd and ModemManager
+- the USB serial devices
+- raw output of `lsusb`, `udevadm info`, `fuser -v` and `systemctl is-active`
+
+Missing tools are reported, not fatal, and each command is limited to 3 seconds. ModemManager is fine when udev marks the receiver `ID_MM_DEVICE_IGNORE=1`. If access is denied, **Grant Access** lists the udev rule commands to copy; the app never runs privileged commands. The page never opens the receiver's tty, so it is safe while a session runs. *Copy* and *Save as JSON* produce the same document the old `doctor --json` printed.
+
+## Replay and demo
+
+A replay decodes the capture as fast as possible and shows a progress bar (Stop cancels it). A raw capture has no per-read timestamps, so replay can't reproduce the original timing, TTFF or stale intervals: ages describe the decode pass. An empty capture, or one without NAV-PVT/GGA/RMC, is reported explicitly. The synthetic demo emits generated frames once a second, optionally with a fault. Both are labelled in a banner so they are never mistaken for live hardware.
+
+## Ending a session
+
+Stop (F5), closing the window, Ctrl+Q, SIGINT/SIGTERM/SIGHUP, an unexpected error and unplugging the receiver all go through the same shutdown:
+1. Release the tty.
+2. Finish the report (a running test becomes INTERRUPTED).
+3. Close every evidence file.
+
+After an unplug, a banner says so; reconnect and start a new session (there is no automatic reconnect). The process exit status after a signal is 128 + the signal number.
+
+## From the command-line tool (1.x)
+
+| 1.x command / option | Now |
+| --- | --- |
+| `m9n list` | Receiver list in the setup sidebar; *USB Serial Devices* on the Host page |
+| `m9n doctor [--json]` | Host page; *Save as JSON* |
+| `m9n watch` | *Mode: Watch*, Start |
+| `m9n test --duration N --report F` | *Mode: Device test* + *Duration*, or Run Device Test; *Test report* output |
+| `m9n demo --fault F` | *Source: Synthetic demo* + *Simulated fault* |
+| `m9n replay FILE` | *Source: Replay capture* + *Capture file* |
+| `--port`, `--baud`, `--passive` | Receiver, Baud rate, Passive |
+| `--interval`, `--stale-after` | Refresh interval, Stale after |
+| `--raw-log`, `--json-log`, `--log-file`, `--debug` | Evidence Files switches (pin a file to choose its exact path), Debug logging |
+| `--json` stdout | Copy snapshot / report JSON; the JSONL and report files |
+| `--plain` | Not applicable |
+| Exit codes 0/2/1/130 | The report's `status` and `exit_code` fields (unchanged); no process exit codes |
