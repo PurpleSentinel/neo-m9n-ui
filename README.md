@@ -10,6 +10,8 @@ The receiver is only sent empty-payload UBX diagnostic polls. The app never chan
 
 > Version 2.0 replaced the earlier command-line tool with this application. See [CHANGELOG.md](CHANGELOG.md), including what replaces scripted use.
 
+**New here?** The [project wiki](https://github.com/PurpleSentinel/neo-m9n-ui/wiki) has step-by-step guides: [installation](https://github.com/PurpleSentinel/neo-m9n-ui/wiki/Installation), [getting started](https://github.com/PurpleSentinel/neo-m9n-ui/wiki/Getting-Started), [device test results](https://github.com/PurpleSentinel/neo-m9n-ui/wiki/Device-Test-Results), [troubleshooting](https://github.com/PurpleSentinel/neo-m9n-ui/wiki/Troubleshooting) and an [FAQ](https://github.com/PurpleSentinel/neo-m9n-ui/wiki/FAQ).
+
 ## Quick start on Fedora
 
 ```bash
@@ -91,4 +93,4 @@ python3 scripts/simulate-device.py --fault no-fix
 
 It prints a `/dev/pts/…` path to enter under **Receiver: Other path…**. That tests the software path, not your GNSS module.
 
-More: [user guide](docs/USER-GUIDE.md), [troubleshooting](docs/TROUBLESHOOTING.md), [architecture](ARCHITECTURE.md), [protocol and data contract](docs/PROTOCOL.md), [validation](docs/VALIDATION.md), [contributing](CONTRIBUTING.md).
+More: [wiki](https://github.com/PurpleSentinel/neo-m9n-ui/wiki), [user guide](docs/USER-GUIDE.md), [troubleshooting](docs/TROUBLESHOOTING.md), [architecture](ARCHITECTURE.md), [protocol and data contract](docs/PROTOCOL.md), [validation](docs/VALIDATION.md), [contributing](CONTRIBUTING.md).
