@@ -368,6 +368,69 @@ class HostPageTests(unittest.TestCase):
         self.assertFalse(result["fix_visible"])
 
 
+class ReplayDemoTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, kind, capture_bytes=None):
+        from m9n.demo import sample
+        with tempfile.TemporaryDirectory() as out:
+            capture = Path(out) / "capture" / "c.ubx"
+            capture.parent.mkdir()
+            if capture_bytes is None:
+                unit = b"".join(sample(1000 + i * 1000) for i in range(100))
+                capture_bytes = unit * (6 * 1024 * 1024 // len(unit))  # ~6 MB
+            capture.write_bytes(capture_bytes)
+            process, result = run_probe(self.env, "replay", M9N_KIND=kind, M9N_CAPTURE=str(capture),
+                                        M9N_OUT=out, timeout=60)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        self.assertEqual(result["files_open"], 0)  # Capture and outputs closed in every outcome.
+        self.assertFalse(result["progress_visible_after"])
+        return result
+
+    def test_large_replay_is_responsive_and_cancellable(self):
+        result = self.probe("cancel")
+        self.assertEqual(result["reason"], "user_stopped")
+        self.assertIn("REPLAY", result["banner"])
+        low, high = result["fractions"]
+        self.assertTrue(0 < high < 1, result["fractions"])
+        self.assertLess(result["max_gap_ms"], 250)
+        self.assertEqual(result["jsonl_lines"], 1)
+
+    def test_complete_replay(self):
+        from m9n.demo import sample
+        result = self.probe("complete", b"".join(sample(1000 + i * 1000) for i in range(20)))
+        self.assertEqual(result["reason"], "completed")
+        self.assertTrue(any(t.startswith("Replay complete: 120 valid frames") for t in result["toasts"]),
+                        result["toasts"])
+        self.assertEqual(result["dashboard"], "content")
+        self.assertIsNone(result["dialog"])
+
+    def test_empty_capture(self):
+        result = self.probe("empty", b"")
+        self.assertEqual(result["dialog"], "Capture Is Empty")
+        self.assertIn("empty", result["banner_after"])
+
+    def test_capture_without_navigation(self):
+        from m9n.protocol import ubx
+        version = b"SPG 4.04".ljust(30, b"\0") + b"00190000".ljust(10, b"\0")
+        result = self.probe("nonav", ubx(10, 4, version) * 3)
+        self.assertEqual(result["dialog"], "No Navigation Found")
+        self.assertIn("no navigation", result["banner_after"])
+
+    def test_demo_fault_is_labelled(self):
+        result = self.probe("demo", b"")
+        self.assertIn("SYNTHETIC DEMO", result["banner"])
+        self.assertGreater(result["checksum"], 0)  # The corrupt fault really corrupts frames.
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:
