@@ -7,6 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from m9n import __version__
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -18,7 +20,7 @@ class InstallerTests(unittest.TestCase):
             self.assertIn("m9n.gui.application", launcher.read_text())
             result = subprocess.run([str(launcher), "--version"], capture_output=True, text=True, timeout=10)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(result.stdout.strip(), "m9n 2.0.0")
+        self.assertEqual(result.stdout.strip(), f"m9n {__version__}")
 
     def install(self, home, *args):
         with patch("pathlib.Path.home", return_value=home), patch("sys.argv", ["install-user.py", *args]):
@@ -59,7 +61,7 @@ class InstallerTests(unittest.TestCase):
     def test_module_entry_point_version(self):
         result = subprocess.run([sys.executable, "-m", "m9n", "--version"], cwd=ROOT,
                                 capture_output=True, text=True, timeout=10)
-        self.assertEqual((result.returncode, result.stdout.strip()), (0, "m9n 2.0.0"))
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, f"m9n {__version__}"))
 
     def test_no_command_line_interface_remains(self):
         sources = "\n".join(p.read_text() for p in (ROOT / "m9n").rglob("*.py"))

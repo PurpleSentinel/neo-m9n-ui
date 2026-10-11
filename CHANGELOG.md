@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.0.1 (unreleased)
+## 2.0.1 (2026-10-11)
 
 ### Added
 - **Vehicle** page, between Receiver and Messages, for reading on the move (#40):
