@@ -1,0 +1,53 @@
+"""Run GUI probes on a private Broadway display and D-Bus session bus."""
+import contextlib
+import json
+import os
+import shutil
+import subprocess
+import sys
+import time
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def gui_runtime_missing():
+    from m9n.gui.deps import check
+    return check()
+
+
+@contextlib.contextmanager
+def headless_display():
+    """Yield an environment for GTK clients that never touches the desktop session."""
+    missing = gui_runtime_missing()
+    if missing:
+        raise unittest.SkipTest(missing)
+    for tool in ("gtk4-broadwayd", "dbus-run-session"):
+        if not shutil.which(tool):
+            raise unittest.SkipTest(f"{tool} not installed")
+    display = 40 + os.getpid() % 50
+    server = subprocess.Popen(["gtk4-broadwayd", f":{display}"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    socket = Path(runtime) / f"broadway{display + 1}.socket" if runtime else None
+    deadline = time.monotonic() + 5
+    while socket and not socket.exists() and time.monotonic() < deadline and server.poll() is None:
+        time.sleep(.05)
+    if not socket:
+        time.sleep(1)
+    env = {k: v for k, v in os.environ.items() if k not in ("WAYLAND_DISPLAY", "DISPLAY", "DBUS_SESSION_BUS_ADDRESS")}
+    env.update(GDK_BACKEND="broadway", BROADWAY_DISPLAY=f":{display}", PYTHONPATH=str(ROOT),
+               ADW_DISABLE_PORTAL="1", GTK_USE_PORTAL="0")
+    try:
+        yield env
+    finally:
+        server.terminate()
+        server.wait(5)
+
+
+def run_probe(env, scenario, timeout=30, **extra_env):
+    """Run tests/gui_probe.py SCENARIO on its own session bus; return (process, result dict)."""
+    process = subprocess.run(["dbus-run-session", "--", sys.executable, str(ROOT / "tests/gui_probe.py"), scenario],
+                             env={**env, **extra_env}, cwd=ROOT, capture_output=True, text=True, timeout=timeout)
+    lines = [line for line in process.stdout.splitlines() if line.startswith("RESULT ")]
+    return process, json.loads(lines[-1][7:]) if lines else None
