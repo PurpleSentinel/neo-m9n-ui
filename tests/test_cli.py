@@ -15,7 +15,8 @@ from unittest.mock import patch
 from m9n.cli import parser, validate_outputs
 from m9n.demo import sample
 from m9n.protocol import nmea
-from m9n.transport import SerialPort, choose_port
+from m9n.hostinfo import choose_port
+from m9n.transport import SerialPort
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -92,12 +93,12 @@ class CLITests(unittest.TestCase):
         self.assertEqual(cli("test", "--duration", "0").returncode, 1)
 
     def test_auto_discovery_selection(self):
-        with patch("m9n.transport.devices", return_value=[{"vid": "1546", "port": "/dev/ttyACM0"}]):
+        with patch("m9n.hostinfo.devices", return_value=[{"vid": "1546", "port": "/dev/ttyACM0"}]):
             self.assertEqual(choose_port(), "/dev/ttyACM0")
-        with patch("m9n.transport.devices", return_value=[]):
+        with patch("m9n.hostinfo.devices", return_value=[]):
             with self.assertRaises(OSError):
                 choose_port()
-        with patch("m9n.transport.devices", return_value=[{"vid": "1546", "port": "a"}, {"vid": "1546", "port": "b"}]):
+        with patch("m9n.hostinfo.devices", return_value=[{"vid": "1546", "port": "a"}, {"vid": "1546", "port": "b"}]):
             with self.assertRaises(OSError):
                 choose_port()
 

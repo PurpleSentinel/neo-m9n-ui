@@ -1,4 +1,4 @@
-"""Linux termios USB tty transport; no pip serial dependency."""
+"""Linux termios USB tty transport; no pip serial dependency. Discovery lives in hostinfo."""
 import errno
 import fcntl
 import os
@@ -6,40 +6,6 @@ import select
 import termios
 import time
 import tty
-from pathlib import Path
-
-
-def devices(sys_root=Path("/sys"), dev_root=Path("/dev")):
-    rows = []
-    for entry in sorted((sys_root / "class/tty").glob("*")):
-        if not entry.name.startswith(("ttyACM", "ttyUSB")):
-            continue
-        path = (entry / "device").resolve()
-        row = {"port": str(dev_root / entry.name), "vid": None, "pid": None,
-               "serial": None, "product": None, "manufacturer": None}
-        for parent in [path, *path.parents]:
-            if (parent / "idVendor").exists():
-                for key, filename in (("vid", "idVendor"), ("pid", "idProduct"),
-                                      ("serial", "serial"), ("product", "product"),
-                                      ("manufacturer", "manufacturer")):
-                    try:
-                        row[key] = (parent / filename).read_text().strip()
-                    except OSError:
-                        pass
-                break
-        rows.append(row)
-    return rows
-
-
-def choose_port(explicit=None):
-    if explicit:
-        return explicit
-    candidates = [d for d in devices() if d["vid"] == "1546"]
-    if len(candidates) == 1:
-        return candidates[0]["port"]
-    if not candidates:
-        raise OSError("No u-blox USB tty found. Run 'm9n doctor'; use --port /dev/ttyACM0 if needed.")
-    raise OSError("Multiple u-blox devices found; select --port explicitly: " + ", ".join(d["port"] for d in candidates))
 
 
 class SerialPort:

@@ -2,18 +2,13 @@
 import argparse
 import logging
 import math
-import os
-import platform
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
-from . import __version__
+from . import __version__, hostinfo
 from .controller import FORMATTER, INTERRUPTED, SessionConfig, SessionController, run_until_finished, validate
 from .display import render, report_text
 from .serialize import json_line, safe
-from .transport import choose_port, devices
 
 LOG = logging.getLogger("m9n")
 
@@ -141,41 +136,9 @@ def run(args):
     return 1 if result.output_errors and code in (0, 2) else code
 
 
-def command_output(command):
-    if not shutil.which(command[0]):
-        return {"available": False, "command": command, "output": "Optional command not installed"}
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=3, check=False)
-        return {"available": True, "command": command, "exit_code": result.returncode,
-                "output": (result.stdout + result.stderr).strip()[:16000]}
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        return {"available": True, "command": command, "output": str(exc)}
-
-
 def doctor(args):
-    rows = devices()
-    port = args.port
-    error = None
-    if not port:
-        try:
-            port = choose_port()
-        except OSError as exc:
-            error = str(exc)
-    accessible = bool(port and os.access(port, os.R_OK | os.W_OK))
-    data = {"python": platform.python_version(), "kernel": platform.release(), "platform": platform.system(),
-            "devices": rows, "selected_port": port, "read_write_access": accessible,
-            "selection_error": error, "cdc_acm_loaded": Path("/sys/module/cdc_acm").exists(),
-            "lsusb": command_output(["lsusb"]),
-            "gpsd": command_output(["systemctl", "is-active", "gpsd.service", "gpsd.socket"]),
-            "modemmanager": command_output(["systemctl", "is-active", "ModemManager.service"]),
-            "hints": ["Use a USB data cable and connect the GNSS board's USB port.",
-                      "If USB enumerates but no tty appears, inspect 'journalctl -k -b' and try 'sudo modprobe cdc_acm'.",
-                      "For access errors, inspect 'ls -l /dev/ttyACM0' and install the supplied uaccess udev rule or join the actual tty owning group.",
-                      "If another process owns the port, stop only the relevant gpsd service/socket or exclude this device from ModemManager.",
-                      "No position fix alone does not establish a hardware fault; check antenna and sky view."]}
-    if port:
-        data["udev"] = command_output(["udevadm", "info", "--query=property", "--name=" + port])
-        data["owners"] = command_output(["fuser", "-v", port])
+    data = hostinfo.collect(args.port)
+    port, error, accessible = data["selected_port"], data["selection_error"], data["read_write_access"]
     if args.json:
         print(json_line(data))
     else:
@@ -194,7 +157,7 @@ def main(argv=None):
     args = parser().parse_args(argv)
     try:
         if args.command == "list":
-            rows = devices()
+            rows = hostinfo.devices()
             if args.json:
                 print(json_line(rows))
             elif not rows:
