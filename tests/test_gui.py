@@ -255,6 +255,65 @@ class MessagesTests(unittest.TestCase):
         self.assertTrue(result["paused_at_top"])
 
 
+class DeviceTestPageTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        with tempfile.TemporaryDirectory() as out:
+            process, result = run_probe(self.env, "devicetest", M9N_OUT=out, **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        self.assertTrue(result["empty_has_button"])
+        self.assertEqual(result["mode"], "test")
+        self.assertFalse(result["run_test_enabled_while_running"])
+        self.assertEqual(result["running_view"], "running")
+        self.assertIn("remaining", result["remaining"])
+        self.assertEqual(result["visible_page"], "test")
+        self.assertEqual(result["view"], "result")
+        self.assertEqual(result["title"], result["report_status"])
+        return result
+
+    def test_healthy_demo_passes(self):
+        result = self.probe()
+        self.assertEqual(result["title"], "PASS")
+        self.assertGreater(result["fraction"], 0)
+        self.assertIn("no report file was configured", result["report_subtitle"])
+        self.assertEqual(result["save_label"], "Save Report…")
+        self.assertTrue(result["saved"] and result["saved_matches"])
+        self.assertIn("saved-report.json", result["subtitle_after_save"])
+
+    def test_rf_demo_warns_with_rf_detail(self):
+        result = self.probe(M9N_FAULT="rf", M9N_TRIGGER="configured")
+        self.assertEqual(result["title"], "WARN")
+        self.assertIn("RF interference", result["checks"]["RF health"])
+        self.assertIn("Saved to", result["report_subtitle"])
+        self.assertEqual(result["save_label"], "Save a Copy…")
+        self.assertTrue(result["configured_file_matches"])
+
+    def test_cancel_is_interrupted(self):
+        result = self.probe(M9N_TRIGGER="cancel", M9N_DURATION="60")
+        self.assertEqual(result["title"], "INTERRUPTED")
+
+    def test_failed_report_write_offers_save(self):
+        result = self.probe(M9N_TRIGGER="write-fails")
+        self.assertIn("failed", result["report_subtitle"])
+        self.assertEqual(result["save_label"], "Save Report…")
+        self.assertTrue(result["saved"] and result["saved_matches"])
+
+    def test_unplug_fails_with_usb_transport(self):
+        with Receiver(unplug_after=3.0) as receiver:  # Includes the probe's start-up time.
+            result = self.probe(M9N_PORT=receiver.port, M9N_DURATION="30", M9N_TRIGGER="unplug")
+        self.assertEqual(result["title"], "FAIL")
+        self.assertIn("USB transport", result["checks"])
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:

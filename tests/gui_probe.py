@@ -340,6 +340,60 @@ def messages(win):
     later(1500, step1)
 
 
+def devicetest(win):
+    page = win.pages["test"]
+    out = Path(os.environ["M9N_OUT"])
+    trigger = os.environ.get("M9N_TRIGGER", "complete")
+    settings = win.setup.settings
+    if os.environ.get("M9N_PORT"):
+        settings.source, settings.port = "device", os.environ["M9N_PORT"]
+    else:
+        settings.source, settings.fault = "demo", os.environ.get("M9N_FAULT", "")
+    settings.test_duration = float(os.environ.get("M9N_DURATION", "1.5"))
+    settings.output_dir = str(out)
+    settings.report = trigger in ("configured", "write-fails")
+    settings.pinned = {}  # Saved settings are shared between probes in one test class.
+    if trigger == "write-fails":
+        (out / "gone").mkdir()
+        settings.pinned = {"report": str(out / "gone" / "report.json")}
+    result["empty_has_button"] = page.stack.get_visible_child_name() == "empty"
+    win.activate_action("win.run-test", None)
+    result["mode"] = win.runner.config.mode if win.runner.running else None
+    result["run_test_enabled_while_running"] = win.run_test_action.get_enabled()
+    if trigger == "write-fails":
+        (out / "gone").rmdir()
+
+    def running():
+        result["running_view"] = page.views.get_visible_child_name()
+        result["fraction"] = page.progress.get_fraction()
+        result["remaining"] = page.remaining.get_label()
+        if trigger == "cancel":
+            win.activate_action("win.toggle-session", None)
+
+    def finished(_runner, outcome):
+        later(100, lambda: inspect(outcome))
+
+    def inspect(outcome):
+        result["visible_page"] = win.stack.get_visible_child_name()
+        result["view"] = page.views.get_visible_child_name()
+        result["title"] = page.status_title.get_label()
+        result["checks"] = {row.get_title(): row.get_subtitle() for row in page.check_rows}
+        result["report_subtitle"] = page.report_row.get_subtitle()
+        result["save_label"] = page.save_button.get_label()
+        result["report_status"] = outcome.report["status"]
+        if trigger in ("complete", "write-fails"):
+            target = out / "saved-report.json"
+            result["saved"] = page.write_report(str(target))
+            result["saved_matches"] = json.loads(target.read_text()) == outcome.report
+            result["subtitle_after_save"] = page.report_row.get_subtitle()
+        if trigger == "configured":
+            files = list(out.glob("*-report.json"))
+            result["configured_file_matches"] = bool(files) and json.loads(files[0].read_text()) == outcome.report
+        later(100, app.quit)
+    win.runner.connect("finished", finished)
+    later(700, running)
+
+
 def on_activate(_app):
     result["activations"] += 1
     if result["activations"] == 1:

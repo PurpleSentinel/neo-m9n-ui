@@ -16,7 +16,8 @@ from .window import MainWindow  # noqa: E402
 LOG = logging.getLogger("m9n")
 APP_ID = "io.github.PurpleSentinel.NeoM9N"
 APP_NAME = "NEO-M9N Monitor"
-SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Show or hide session setup", "F9")]),
+SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Run a device test", "<Control>t"),
+                          ("Show or hide session setup", "F9")]),
              ("General", [("Keyboard shortcuts", "<Control>question"), ("Quit", "<Control>q")])]
 
 
@@ -45,6 +46,7 @@ class Application(Adw.Application):
         self.add_simple_action("shortcuts", self.on_shortcuts, ["<Control>question"])
         self.set_accels_for_action("win.toggle-session", ["F5"])
         self.set_accels_for_action("win.toggle-sidebar", ["F9"])
+        self.set_accels_for_action("win.run-test", ["<Control>t"])
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, self.on_signal, signum)
         self._previous_excepthook = sys.excepthook
