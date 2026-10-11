@@ -61,6 +61,9 @@ def shell(win):
                                  for key, w in win.pages.items() if key not in ("messages", "host"))
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
+    from gi.repository import Gdk
+    from m9n.gui.app import APP_ID
+    result["app_icon"] = Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).has_icon(APP_ID)
     result["about"] = dialog_name(win, "about")
     result["shortcuts"] = dialog_name(win, "shortcuts")
     win.toast("probe")

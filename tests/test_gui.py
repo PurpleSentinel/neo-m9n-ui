@@ -53,6 +53,7 @@ class ShellTests(unittest.TestCase):
         self.assertEqual(result["accels"]["app.quit"], ["<Control>q"])
         self.assertEqual(result["accels"]["win.toggle-session"], ["F5"])
         self.assertEqual(result["about"], "AboutDialog")
+        self.assertTrue(result["app_icon"])  # Packaged icon resolves even when not installed.
         self.assertIn(result["shortcuts"], ("ShortcutsDialog", "AlertDialog"))
         self.assertTrue(result["banner_shown"] and result["banner_hidden"])
         self.assertEqual(result["visible_page"], "host")
