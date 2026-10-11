@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- The Python package (distribution) is renamed from `neo-m9n-cli` to **`neo-m9n-monitor`**, so wheels are named `neo_m9n_monitor-…whl`. The `m9n` command, the `m9n` import package, the app ID and the install locations are unchanged. If you installed an earlier wheel with pip, run `pip uninstall neo-m9n-cli` first; both provide the same files. `scripts/install-user.py` users need do nothing.
+
 ## 2.0.1 (2026-10-11)
 
 ### Added

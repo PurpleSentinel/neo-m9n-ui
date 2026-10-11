@@ -3,7 +3,7 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "neo-m9n-cli"
+name = "neo-m9n-monitor"
 version = "2.0.1"
 description = "GNOME desktop diagnostics and live monitoring for SparkFun u-blox NEO-M9N GNSS receivers over USB"
 readme = "README.md"

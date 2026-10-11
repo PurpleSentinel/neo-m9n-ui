@@ -57,7 +57,7 @@ python3 -m venv --system-site-packages .venv
 .venv/bin/m9n
 ```
 
-pip obtains the `setuptools>=77` build dependency if necessary; it is not a runtime dependency. A pip install provides the `m9n` command but no desktop entry; use the user installer for that. Avoid installing into Fedora's system Python with `sudo pip`.
+The distribution is named `neo-m9n-monitor` (2.0.1 and earlier used `neo-m9n-cli`; uninstall that first with `.venv/bin/python -m pip uninstall neo-m9n-cli` when upgrading an existing environment, since both provide the same files). pip obtains the `setuptools>=77` build dependency if necessary; it is not a runtime dependency. A pip install provides the `m9n` command but no desktop entry; use the user installer for that. Avoid installing into Fedora's system Python with `sudo pip`.
 
 ## USB permissions: local desktop
 
