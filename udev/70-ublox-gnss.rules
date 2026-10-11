@@ -1,0 +1,5 @@
+# Optional: install as /etc/udev/rules.d/70-ublox-gnss.rules, reload and replug.
+# Applies to all u-blox USB tty devices (VID 1546), not only NEO-M9N.
+# uaccess gives read/write access to the active local desktop user, not SSH users.
+# ModemManager's per-device ignore avoids GNSS modem probes.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
