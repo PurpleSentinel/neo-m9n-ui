@@ -137,6 +137,62 @@ def many_satellites_capture(path, count=35):
     path.write_bytes(sample() + ubx(1, 53, bytes(payload)))
 
 
+class LayoutTests(unittest.TestCase):
+    """Pages use the width they get: columns follow the page's own width, never overflow it."""
+
+    COLUMN_PAGES = ("dashboard", "receiver", "test", "host")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "layout", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result)
+        self.assertEqual(result["exit"], 0)
+        for key in self.COLUMN_PAGES:
+            self.assertFalse(result[key]["overflow"], key)
+        return result
+
+    def test_desktop_window_with_sidebar_uses_two_columns(self):
+        result = self.probe(M9N_SIDEBAR="1")
+        for key in self.COLUMN_PAGES:
+            self.assertEqual(result[key]["columns"], 2, key)
+            self.assertLess(result[key]["width"], 1000, key)  # The sidebar narrows the page itself.
+        self.assertEqual(result["dashboard"]["bands"], ["horizontal"])  # Fix status beside Active Issues.
+        self.assertEqual(sum(result["dashboard"]["flow"]), 7)
+        self.assertEqual(result["satellites"]["orientation"], "vertical")  # Too narrow for table and sky side by side.
+
+    def test_desktop_window_without_sidebar(self):
+        result = self.probe()
+        for key in self.COLUMN_PAGES:
+            self.assertEqual(result[key]["columns"], 2, key)
+        self.assertEqual(result["satellites"]["orientation"], "horizontal")
+        self.assertEqual(result["satellites"]["sky"], 260)
+
+    def test_phone_width_stacks_everything(self):
+        result = self.probe(M9N_PROBE_WIDTH="360")
+        for key in self.COLUMN_PAGES:
+            self.assertEqual(result[key]["columns"], 1, key)
+            self.assertTrue(all(band == "vertical" for band in result[key]["bands"]), key)
+        self.assertEqual(result["dashboard"]["flow"], [7])
+        self.assertEqual(result["satellites"]["orientation"], "vertical")
+
+    def test_wide_page_uses_three_columns_and_a_larger_sky_plot(self):
+        # Breakpoints are in sp: halving the text scale makes a 1000 px page 2000 sp wide.
+        result = self.probe(M9N_TEXT_SCALE="0.5")
+        for key in self.COLUMN_PAGES:
+            self.assertEqual(result[key]["columns"], 3, key)
+        self.assertEqual(sum(result["dashboard"]["flow"]), 7)
+        self.assertGreater(result["satellites"]["sky"], 260)
+
+
 class SatelliteTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

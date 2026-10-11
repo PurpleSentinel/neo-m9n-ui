@@ -487,10 +487,56 @@ def replay(win):
         later(1300, lambda: win.runner.stop())
 
 
+def layout(win):
+    """Columns per page after a short demo device test, at M9N_PROBE_WIDTH with or without the sidebar."""
+    win.split.set_show_sidebar(os.environ.get("M9N_SIDEBAR") == "1")
+    keys = ["dashboard", "receiver", "test", "host", "satellites"]
+
+    def visit():
+        if not keys:
+            app.quit()
+            return
+        key = keys.pop(0)
+        win.show_page(key)
+        page = win.pages[key]
+        content = page.layout if key == "satellites" else page.columns
+        wait_for(lambda: content.get_width() > 0, lambda _ok: later(200, lambda: inspect(key)))
+
+    def inspect(key):
+        page = win.pages[key]
+        if key == "satellites":
+            result[key] = {"orientation": page.layout.get_orientation().value_nick,
+                           "sky": page.sky.get_content_width(), "width": page.get_width()}
+        else:
+            columns = page.columns
+            bands = [child for child in iter_children(columns.content) if child is not columns.flow_box]
+            result[key] = {
+                "columns": len(list(iter_children(columns.flow_box))),
+                "flow": [len(list(iter_children(column))) for column in iter_children(columns.flow_box)],
+                "bands": [band.get_orientation().value_nick for band in bands],
+                "width": columns.get_width(),
+                # Content wider than the page would be clipped: the scrolled window never scrolls sideways.
+                "overflow": columns.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0] > columns.get_width(),
+            }
+        visit()
+
+    win.runner.connect("finished", lambda *_: later(300, visit))
+    win.start_session(SessionConfig(source="demo", mode="test", duration=1.5))
+
+
+def iter_children(widget):
+    child = widget.get_first_child()
+    while child:
+        yield child
+        child = child.get_next_sibling()
+
+
 def on_activate(_app):
     result["activations"] += 1
     if result["activations"] == 1:
         win = app.props.active_window
+        if "M9N_TEXT_SCALE" in os.environ:  # Breakpoints are in sp, so a smaller text scale is a wider page.
+            Gtk.Settings.get_default().set_property("gtk-xft-dpi", int(96 * 1024 * float(os.environ["M9N_TEXT_SCALE"])))
         win.set_default_size(WIDTH, 700)
         later(300, lambda: globals()[SCENARIO](win))
 

@@ -12,6 +12,7 @@ QUALITY = {0: "no signal", 1: "searching", 2: "acquired", 3: "unusable", 4: "cod
            5: "carrier locked", 6: "carrier locked", 7: "carrier locked"}
 HEALTH = {0: "unknown", 1: "healthy", 2: "unhealthy"}
 CNO_MAX = 50  # dB-Hz; strong open-sky signals sit in the 40s.
+CNO_WIDTH = 140
 
 
 def known_position(sat):
@@ -34,11 +35,17 @@ def sorter(key):
     return Gtk.CustomSorter.new(lambda a, b, _: ordering(key(a.data), key(b.data)), None)
 
 
+STACK_BELOW = 980  # Table columns plus the sky plot need about this many sp side by side.
+SKY = 260
+# (minimum page width sp, minimum page height sp, sky plot size px), smallest first.
+LARGER_SKY = ((1300, 640, 420), (1700, 860, 560))
+
+
 class SkyPlot(Gtk.DrawingArea):
     """Polar azimuth/elevation plot; used satellites filled in the accent colour."""
 
     def __init__(self):
-        super().__init__(content_width=260, content_height=260, hexpand=False, vexpand=False)
+        super().__init__(content_width=SKY, content_height=SKY, hexpand=False, vexpand=False)
         self.satellites = []
         self.set_draw_func(self.draw)
         self.update_property([Gtk.AccessibleProperty.LABEL], ["Sky plot"])
@@ -120,7 +127,8 @@ class SatellitesPage(SessionPage):
                         lambda d: d["azimuth_deg"], numeric=True)
         self.add_column("Used", lambda d: "yes" if d["used"] else "no", lambda d: not d["used"])
         self.add_column("Signal", lambda d: QUALITY.get(d["quality"], str(d["quality"])), lambda d: -d["quality"])
-        self.add_column("Health", lambda d: HEALTH.get(d["health"], str(d["health"])), lambda d: d["health"])
+        self.add_column("Health", lambda d: HEALTH.get(d["health"], str(d["health"])),
+                        lambda d: d["health"]).set_expand(True)
 
         scrolled = Gtk.ScrolledWindow(child=self.view, vexpand=True, hexpand=True)
         scrolled.add_css_class("card")
@@ -137,7 +145,6 @@ class SatellitesPage(SessionPage):
         table.append(self.summary)
         table.append(self.constellations)
         table.append(scrolled)
-        # The window's narrow breakpoint flips this to vertical (sky plot above the table).
         self.layout = Gtk.Box(spacing=18, margin_top=18, margin_bottom=18, margin_start=18, margin_end=18)
         self.layout.append(table)
         self.layout.append(sky_card)
@@ -147,7 +154,19 @@ class SatellitesPage(SessionPage):
         self.inner = Gtk.Stack()
         self.inner.add_named(self.layout, "table")
         self.inner.add_named(self.nodata, "nodata")
-        return self.inner
+        # The page's width (the sidebar narrows it) decides the layout: the sky plot moves above
+        # the table when both do not fit side by side, and grows when there is room to spare.
+        adaptive = Adw.BreakpointBin(child=self.inner, width_request=280, height_request=200)
+        stacked = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(f"max-width: {STACK_BELOW}sp"))
+        stacked.add_setter(self.layout, "orientation", Gtk.Orientation.VERTICAL)
+        adaptive.add_breakpoint(stacked)
+        for width, height, size in LARGER_SKY:  # When several match, the last one added applies.
+            condition = Adw.BreakpointCondition.parse(f"min-width: {width}sp and min-height: {height}sp")
+            larger = Adw.Breakpoint.new(condition)
+            larger.add_setter(self.sky, "content-width", size)
+            larger.add_setter(self.sky, "content-height", size)
+            adaptive.add_breakpoint(larger)
+        return adaptive
 
     def add_column(self, title, text, key, numeric=False):
         factory = Gtk.SignalListItemFactory()
@@ -186,7 +205,8 @@ class SatellitesPage(SessionPage):
 
         factory.connect("setup", setup)
         factory.connect("bind", bind)
-        column = Gtk.ColumnViewColumn(title="C/N0 dB-Hz", factory=factory, expand=True,
+        # A fixed width keeps the bars comparable; spare width goes to the last column instead.
+        column = Gtk.ColumnViewColumn(title="C/N0 dB-Hz", factory=factory, fixed_width=CNO_WIDTH,
                                       sorter=sorter(lambda d: d["cno_dbhz"]))
         self.view.append_column(column)
 

@@ -27,7 +27,7 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `window.py` | Main window: header bar, adaptive page switcher, setup sidebar, banner, progress, toasts, session control, close confirmation |
 | `runner.py` | Drives `SessionController` from the GLib main loop (fd watch + tick) and re-emits its events as GObject signals |
 | `setup.py` | Session setup sidebar mirroring `SessionSettings` |
-| `pages.py`, `format.py` | Page registry and base class (empty state until data); GTK-free value formatting |
+| `pages.py`, `layout.py`, `format.py` | Page registry, base class (empty state until data) and `ColumnPage`, which flows groups into one to three columns by the page's own width; GTK-free column balancing and value formatting |
 | `dashboard.py`, `satellites.py`, `receiver.py`, `messages.py`, `logview.py`, `testpage.py`, `host.py` | The six pages and the shared bounded log list |
 | `data/` | Desktop entry, AppStream metainfo and icons (also used from a checkout) |
 

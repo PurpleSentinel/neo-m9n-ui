@@ -92,7 +92,6 @@ class MainWindow(Adw.ApplicationWindow):
         breakpoint.add_setter(switcher, "visible", False)
         breakpoint.add_setter(self.split, "collapsed", True)
         breakpoint.add_setter(self.split, "show-sidebar", False)
-        breakpoint.add_setter(self.pages["satellites"].layout, "orientation", Gtk.Orientation.VERTICAL)
         self.add_breakpoint(breakpoint)
 
         self.runner = SessionRunner()

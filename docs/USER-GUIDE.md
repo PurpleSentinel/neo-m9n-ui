@@ -2,6 +2,8 @@
 
 NEO-M9N Monitor has a **session setup sidebar** (F9) and six pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
 
+Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their groups out in up to three columns: three on a wide page, two on a typical desktop window, one at phone width. Hiding the sidebar (F9) widens the page, so it can gain a column. On Satellites the sky plot sits beside the table when both fit, moves above it when they don't, and grows on large screens.
+
 ## Keyboard shortcuts
 
 | Keys | Action |

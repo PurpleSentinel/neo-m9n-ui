@@ -7,7 +7,7 @@ from gi.repository import Adw, Gtk
 from ..state import (JAMMING, RF_FRESH_S, SPOOFING, antenna_alarm, jamming_alarm, rf_monitor_known,
                      spoofing_alarm)
 from . import format as fmt
-from .pages import SessionPage, value_row
+from .pages import ColumnPage, SessionPage, value_row
 
 AGC_MAX = 8191  # MON-RF agcCnt range.
 WIRING_NOTE = ("Antenna status depends on how this board wires the antenna supervisor. Values are "
@@ -16,20 +16,22 @@ WIRING_NOTE = ("Antenna status depends on how this board wires the antenna super
 
 def mark(row, alarm):
     (row.value.add_css_class if alarm else row.value.remove_css_class)("warning")
+    # The icon is removed rather than hidden: a hidden prefix still indents the title.
     icon = getattr(row, "alarm_icon", None)
-    if icon is None:
-        icon = row.alarm_icon = Gtk.Image(icon_name="dialog-warning-symbolic", visible=False)
+    if alarm and icon is None:
+        icon = row.alarm_icon = Gtk.Image(icon_name="dialog-warning-symbolic")
         icon.add_css_class("warning")
         icon.update_property([Gtk.AccessibleProperty.LABEL], ["Warning"])
         row.add_prefix(icon)
-    icon.set_visible(alarm)
+    elif not alarm and icon is not None:
+        row.remove(icon)
+        row.alarm_icon = None
 
 
 class ReceiverPage(SessionPage):
     def build(self):
-        self.prefs = Adw.PreferencesPage()
+        page = self.columns = ColumnPage()
         self.rf_group = Adw.PreferencesGroup(title="RF and Antenna (MON-RF)", description=WIRING_NOTE)
-        self.prefs.add(self.rf_group)
         self.rf_rows = []
         self.rf_note = Adw.ActionRow(use_markup=False, title_lines=0)
         self.rf_group.add(self.rf_note)
@@ -39,20 +41,22 @@ class ReceiverPage(SessionPage):
         def group(title, rows, description=None):
             g = Adw.PreferencesGroup(title=title, description=description)
             for key, label in rows:
-                self.rows[key] = value_row(label)
+                self.rows[key] = value_row(label, wrap=key in ("timeouts", "rejected"))
                 g.add(self.rows[key])
-            self.prefs.add(g)
+            return g
 
-        group("Receiver Status (NAV-STATUS)", [("ttff", "Time to first fix"), ("uptime", "Receiver uptime"),
-                                               ("spoof", "Spoofing detector")],
-              "The spoofing detector is an indication only; verify location with an independent source.")
-        group("Diagnostic Freshness", [("MON-VER", "Identity (MON-VER)"), ("NAV-PVT", "Navigation (NAV-PVT)"),
-                                       ("NAV-SAT", "Satellites (NAV-SAT)"), ("NAV-STATUS", "Status (NAV-STATUS)"),
-                                       ("MON-RF", "RF (MON-RF)")],
-              "Time since each message was last received. Missing data is not evidence of a hardware fault.")
-        group("Polling", [("timeouts", "Unanswered polls"), ("rejected", "Rejected polls"),
-                          ("mode", "Mode")])
-        return self.prefs
+        page.add_flow(
+            [self.rf_group,
+             group("Receiver Status (NAV-STATUS)", [("ttff", "Time to first fix"), ("uptime", "Receiver uptime"),
+                                                    ("spoof", "Spoofing detector")],
+                   "The spoofing detector is an indication only; verify location with an independent source."),
+             group("Diagnostic Freshness", [("MON-VER", "Identity (MON-VER)"), ("NAV-PVT", "Navigation (NAV-PVT)"),
+                                            ("NAV-SAT", "Satellites (NAV-SAT)"), ("NAV-STATUS", "Status (NAV-STATUS)"),
+                                            ("MON-RF", "RF (MON-RF)")],
+                   "Time since each message was last received. Missing data is not evidence of a hardware fault."),
+             group("Polling", [("timeouts", "Unanswered polls"), ("rejected", "Rejected polls"),
+                               ("mode", "Mode")])])
+        return page
 
     def session_started(self, config):
         super().session_started(config)

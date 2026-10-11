@@ -5,8 +5,11 @@ Run it on a throwaway display so nothing appears on the desktop:
     gtk4-broadwayd :7 &
     GDK_BACKEND=broadway BROADWAY_DISPLAY=:7 \\
         python3 tests/screenshot.py out.png 1000 700 [page] [app.ACTION|win.ACTION ...]
+
+M9N_SHOT_DELAY_MS (default 700) waits longer, e.g. for a short device test to finish.
 """
 import faulthandler
+import os
 import sys
 from pathlib import Path
 
@@ -75,7 +78,7 @@ def start():
             app.activate_action(name, None)
         else:
             win.activate_action(action, None)
-    GLib.timeout_add(700, shoot)
+    GLib.timeout_add(int(os.environ.get("M9N_SHOT_DELAY_MS", "700")), shoot)
     return False
 
 
