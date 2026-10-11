@@ -32,6 +32,14 @@ class Application(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        # The Messages page shows INFO and up (DEBUG while a debug session runs);
+        # warnings also reach stderr for anyone who started the app from a terminal.
+        LOG.setLevel(logging.INFO)
+        LOG.propagate = False
+        console = logging.StreamHandler(sys.stderr)
+        console.setLevel(logging.WARNING)
+        console.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+        LOG.addHandler(console)
         self.add_simple_action("quit", self.on_quit, ["<Control>q"])
         self.add_simple_action("about", self.on_about)
         self.add_simple_action("shortcuts", self.on_shortcuts, ["<Control>question"])

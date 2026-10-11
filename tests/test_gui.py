@@ -233,6 +233,28 @@ class ReceiverTests(unittest.TestCase):
         self.assertEqual(result["values"]["ttff"], "unavailable")
 
 
+class MessagesTests(unittest.TestCase):
+    def test_receiver_messages_and_application_log(self):
+        with headless_display() as env:
+            process, result = run_probe(env, "messages")
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        self.assertEqual(result["visible_before_session"], "content")
+        receiver = result["receiver"]
+        self.assertIn("GNTXT: Synthetic demonstration", receiver[0])
+        self.assertTrue(receiver[-1].endswith("ERROR INF-ERROR: bad?[31m?text"), receiver[-1])
+        self.assertGreater(result["store"], result["info_visible"])  # Debug lines hidden at Info.
+        self.assertEqual(result["debug_visible"], result["store"])
+        self.assertGreater(result["search_hits"], 0)
+        self.assertTrue(result["search_all_match"])
+        self.assertTrue(result["traceback_logged"])
+        self.assertEqual(result["pending_before_flush"], 6000)  # Batched, not inserted one by one.
+        self.assertEqual(result["bounded"], 5000)
+        self.assertEqual(result["last_line"], "bulk 5999")
+        self.assertTrue(result["following"])
+        self.assertTrue(result["paused_at_top"])
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:
@@ -287,7 +309,7 @@ class LifecycleTests(unittest.TestCase):
                                         M9N_TRIGGER=trigger, M9N_MODE=mode, **env)
             self.assertIsNotNone(result, process.stderr)
             self.assertNotIn("timeout", result, process.stderr)
-            for warning in ("CRITICAL", "Source ID"):
+            for warning in ("-CRITICAL **", "Source ID"):  # GLib/GTK criticals, not our own log lines.
                 self.assertNotIn(warning, process.stderr)
             self.assertTrue(result["started"], process.stderr)
             self.assertEqual(result["running_button"], "Stop")

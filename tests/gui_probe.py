@@ -27,6 +27,19 @@ def later(ms, func):
     GLib.timeout_add(ms, lambda: bool(func()) and False)
 
 
+def wait_for(predicate, then, timeout_ms=3000):
+    """Call then(bool) once predicate holds or the deadline passes; layout is asynchronous."""
+    deadline = GLib.get_monotonic_time() + timeout_ms * 1000
+
+    def poll():
+        ok = predicate()
+        if ok or GLib.get_monotonic_time() > deadline:
+            then(ok)
+            return False
+        return True
+    GLib.timeout_add(50, poll)
+
+
 def page_names(win):
     pages = win.stack.get_pages()
     return [pages.get_item(i).get_name() for i in range(pages.get_n_items())]
@@ -43,7 +56,9 @@ def dialog_name(win, action):
 
 def shell(win):
     result["pages"] = page_names(win)
-    result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage) for w in win.pages.values())
+    # Messages always shows content: the application log matters before any session.
+    result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage)
+                                 for key, w in win.pages.items() if key != "messages")
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
     result["about"] = dialog_name(win, "about")
@@ -264,6 +279,65 @@ def receiver(win):
         later(100, app.quit)
     win.start_session(config)
     later(1300, inspect)
+
+
+def messages(win):
+    import logging
+    page = win.pages["messages"]
+    app_log, receiver_log = page.application, page.receiver
+    result["visible_before_session"] = page.stack.get_visible_child_name()
+    win.show_page("messages")
+    page.views.set_visible_child_name("application")
+    win.start_session(SessionConfig(source="demo", debug=True))
+
+    def step1():
+        win.runner.emit("message", {"host_utc": "2026-10-11T12:00:00.000+00:00", "severity": "ERROR",
+                                    "name": "INF-ERROR", "text": "bad\x1b[31m\x07text"})
+        receiver_log.flush()
+        app_log.flush()
+        result["receiver"] = [receiver_log.store.get_item(i).line() for i in range(receiver_log.store.get_n_items())]
+        result["store"] = app_log.store.get_n_items()
+        result["info_visible"] = app_log.filtered.get_n_items()
+        app_log.level_menu.set_selected(3)
+        result["debug_visible"] = app_log.filtered.get_n_items()
+        app_log.search.set_text("NAV-PVT")
+        app_log.on_search()
+        lines = app_log.visible_text().splitlines()
+        result["search_hits"] = len(lines)
+        result["search_all_match"] = all("NAV-PVT" in line for line in lines)
+        app_log.search.set_text("")
+        app_log.on_search()
+        win.runner.stop()
+        try:
+            raise ValueError("probe traceback")
+        except ValueError:
+            logging.getLogger("m9n").exception("Handled failure")
+        app_log.flush()
+        result["traceback_logged"] = any("probe traceback" in app_log.store.get_item(i).text
+                                         for i in range(app_log.store.get_n_items()))
+        for i in range(6000):
+            app_log.add(app_log.store.get_item(0).__class__("t", logging.INFO, "Info", f"bulk {i}"))
+        result["pending_before_flush"] = len(app_log.pending)
+        app_log.flush()
+        result["bounded"] = app_log.store.get_n_items()
+        result["last_line"] = app_log.store.get_item(app_log.store.get_n_items() - 1).text
+        adj = app_log.scrolled.get_vadjustment()
+        wait_for(lambda: adj.get_upper() > adj.get_page_size()
+                 and adj.get_value() >= adj.get_upper() - adj.get_page_size() - 4, step2)
+
+    def step2(following):
+        adj = app_log.scrolled.get_vadjustment()
+        result["following"] = following
+        adj.set_value(0)
+        for i in range(50):
+            app_log.add(app_log.store.get_item(0).__class__("t", logging.INFO, "Info", f"more {i}"))
+        app_log.flush()
+        later(300, step3)
+
+    def step3():
+        result["paused_at_top"] = app_log.scrolled.get_vadjustment().get_value() == 0
+        app.quit()
+    later(1500, step1)
 
 
 def on_activate(_app):
