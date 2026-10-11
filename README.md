@@ -1,4 +1,4 @@
-# SparkFun NEO-M9N USB CLI for Fedora
+# SparkFun NEO-M9N USB CLI for Linux
 
 `m9n` tests a SparkFun u-blox NEO-M9N connected directly over USB and displays live GNSS data in your terminal. It provides explicit evidence for USB/serial failures, unavailable diagnostics, loss of fix, frozen navigation epochs, checksum failures and receiver-reported RF or firmware errors.
 
