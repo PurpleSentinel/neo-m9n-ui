@@ -20,7 +20,8 @@ APP_NAME = "NEO-M9N Monitor"
 DATA = Path(__file__).resolve().parent / "data"
 SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Run a device test", "<Control>t"),
                           ("Show or hide session setup", "F9")]),
-             ("General", [("Keyboard shortcuts", "<Control>question"), ("Quit", "<Control>q")])]
+             ("General", [("Fullscreen", "F11"), ("Keyboard shortcuts", "<Control>question"),
+                          ("Quit", "<Control>q")])]
 
 
 class Application(Adw.Application):
@@ -52,6 +53,7 @@ class Application(Adw.Application):
         self.set_accels_for_action("win.toggle-session", ["F5"])
         self.set_accels_for_action("win.toggle-sidebar", ["F9"])
         self.set_accels_for_action("win.run-test", ["<Control>t"])
+        self.set_accels_for_action("win.fullscreen", ["F11"])
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, self.on_signal, signum)
         self._previous_excepthook = sys.excepthook

@@ -13,7 +13,7 @@ from ..settings import BAUD_RATES, OUTPUT_LABEL, OUTPUT_SUFFIX
 SOURCES = [("device", "USB receiver"), ("demo", "Synthetic demo"), ("replay", "Replay capture")]
 MODES = [("watch", "Watch"), ("test", "Device test")]
 FAULTS = [("", "None"), ("no-fix", "No fix"), ("rf", "RF alarm"), ("corrupt", "Corrupt frames"),
-          ("frozen", "Frozen epochs"), ("silent", "Silent receiver")]
+          ("frozen", "Frozen epochs"), ("silent", "Silent receiver"), ("drive", "Moving vehicle")]
 RESCAN_MS = 2000
 
 

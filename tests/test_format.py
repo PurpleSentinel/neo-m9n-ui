@@ -39,5 +39,39 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(fmt.utc({"utc": "120000.00"}), "120000.00")  # NMEA time-of-day only.
 
 
+class VehicleFormatTests(unittest.TestCase):
+    def test_speed_units(self):
+        self.assertAlmostEqual(fmt.speed_in(10, "metric"), 36.0)
+        self.assertAlmostEqual(fmt.speed_in(10, "imperial"), 22.369, places=3)
+        self.assertIsNone(fmt.speed_in(None, "metric"))
+
+    def test_gauge_scale_steps_up_before_the_needle_pins(self):
+        self.assertEqual(fmt.gauge_max(None, "metric"), 60)
+        self.assertEqual(fmt.gauge_max(57, "metric"), 60)
+        self.assertEqual(fmt.gauge_max(58, "metric"), 120)
+        self.assertEqual(fmt.gauge_max(100, "imperial"), 120)
+        self.assertEqual(fmt.gauge_max(999, "metric"), 300)
+
+    def test_trip_distance(self):
+        self.assertEqual(fmt.trip_distance(850, "metric"), ("850", "m"))
+        self.assertEqual(fmt.trip_distance(1234, "metric"), ("1.23", "km"))
+        self.assertEqual(fmt.trip_distance(56_789, "metric"), ("56.8", "km"))
+        self.assertEqual(fmt.trip_distance(1609.344, "imperial"), ("1.00", "mi"))
+        self.assertEqual(fmt.trip_distance(20_000, "imperial"), ("12.4", "mi"))
+        self.assertEqual(fmt.trip_distance(None, "metric"), ("unknown", ""))
+
+    def test_altitude_and_heading(self):
+        self.assertEqual(fmt.altitude(1234.4, "metric"), ("1,234", "m"))
+        self.assertEqual(fmt.altitude(100, "imperial"), ("328", "ft"))
+        self.assertEqual(fmt.altitude(None, "imperial"), ("unknown", ""))
+        self.assertEqual([fmt.cardinal(d) for d in (0, 11, 12, 45, 90, 180, 270, 348.75, 359, -90)],
+                         ["N", "N", "NNE", "NE", "E", "S", "W", "N", "N", "W"])
+
+    def test_duration(self):
+        self.assertEqual(fmt.duration(59.9), "0:59")
+        self.assertEqual(fmt.duration(754), "12:34")
+        self.assertEqual(fmt.duration(3725), "1:02:05")
+        self.assertEqual(fmt.duration(None), "unknown")
+
 if __name__ == "__main__":
     unittest.main()

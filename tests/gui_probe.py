@@ -487,6 +487,67 @@ def replay(win):
         later(1300, lambda: win.runner.stop())
 
 
+def vehicle(win):
+    """Vehicle page with the demo (M9N_FAULT: drive, no-fix, frozen, ...); units, reset, inhibit, layout."""
+    page = win.pages["vehicle"]
+    page.set_units("metric")  # Probes share one config directory.
+    # A headless session has no session manager, so record inhibit requests instead of trusting cookies.
+    inhibits = result.setdefault("inhibits", [])
+    original_inhibit, original_uninhibit = app.inhibit, app.uninhibit
+    app.inhibit = lambda window, flags, reason: inhibits.append(["inhibit", int(flags), reason]) or (
+        original_inhibit(window, flags, reason) or 1000 + len(inhibits))
+    app.uninhibit = lambda cookie: inhibits.append(["uninhibit", cookie]) or (
+        original_uninhibit(cookie) if cookie < 1000 else None)
+    result["empty_before"] = page.stack.get_visible_child_name()
+    win.show_page("vehicle")
+    fault = os.environ.get("M9N_FAULT") or None
+    win.start_session(SessionConfig(source="demo", fault=fault, stale_after=float(os.environ.get("M9N_STALE", "5"))))
+
+    def read():
+        return {"visible": page.stack.get_visible_child_name(), "status": page.status.get_label(),
+                "speed": page.speed.value, "maximum": page.speed.maximum, "unit": page.speed.unit,
+                "speed_status": page.speed.status, "heading": page.compass.heading, "hint": page.compass.hint,
+                "altitude": page.altitude.value, "altitude_unit": page.altitude.unit,
+                "profile": len(page.profile),
+                "tiles": {k: [t.value, t.unit] for k, t in page.tiles.items()},
+                "trip": (page.snapshot or {}).get("trip")}
+
+    def first():
+        result["live"] = read()
+        result["idle_inhibited"] = bool(win._idle_cookie)
+        width = page.adaptive.get_width()
+        result["overflow"] = page.adaptive.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0] > width
+        result["main_orientation"] = page.main.get_orientation().value_nick
+        page.imperial.set_active(True)
+        later(1200, units)
+
+    def units():
+        result["imperial"] = read()
+        result["saved_units"] = win.setup.settings.units
+        page.reset_trip()
+        result["after_reset_profile"] = len(page.profile)
+        later(1100, after_reset)
+
+    def after_reset():
+        result["after_reset"] = read()
+        page.metric.set_active(True)
+        win.show_page("dashboard")
+        result["idle_after_leaving"] = bool(win._idle_cookie)
+        win.activate_action("win.fullscreen", None)
+        later(300, fullscreen)
+
+    def fullscreen():
+        result["fullscreen_icon"] = page.fullscreen_button.get_icon_name()
+        result["fullscreened"] = win.is_fullscreen()
+        result["fullscreen_accels"] = app.get_accels_for_action("win.fullscreen")
+        win.runner.stop()
+        result["idle_after_stop"] = bool(win._idle_cookie)
+        result["stopped"] = read()
+        later(100, app.quit)
+
+    later(int(os.environ.get("M9N_WAIT_MS", "3300")), first)
+
+
 def layout(win):
     """Columns per page after a short demo device test, at M9N_PROBE_WIDTH with or without the sidebar."""
     win.split.set_show_sidebar(os.environ.get("M9N_SIDEBAR") == "1")

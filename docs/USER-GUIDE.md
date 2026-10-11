@@ -1,6 +1,6 @@
 # User guide
 
-NEO-M9N Monitor has a **session setup sidebar** (F9) and six pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
+NEO-M9N Monitor has a **session setup sidebar** (F9) and seven pages. A *session* reads from one source, a USB receiver, the synthetic demo or a replay file, until you stop it, its duration ends or the receiver disconnects. Only one session runs at a time, and a second launch of the app just brings the existing window forward, so two copies never compete for the receiver.
 
 Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their groups out in up to three columns: three on a wide page, two on a typical desktop window, one at phone width. Hiding the sidebar (F9) widens the page, so it can gain a column. On Satellites the sky plot sits beside the table when both fit, moves above it when they don't, and grows on large screens.
 
@@ -11,6 +11,7 @@ Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their 
 | F5 | Start or stop the session |
 | Ctrl+T | Run a device test |
 | F9 | Show or hide session setup |
+| F11 | Fullscreen |
 | Ctrl+? | Keyboard shortcuts |
 | Ctrl+Q | Quit (asks first while a session runs) |
 
@@ -20,7 +21,7 @@ Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their 
 | --- | --- | --- |
 | Source | **Source** | USB receiver, Synthetic demo or Replay capture |
 | | **Receiver** | *Automatic* picks the single u-blox (VID 1546) tty and refuses to guess between several. Discovered devices are listed by their stable `/dev/serial/by-id/` name and rescanned every 2 s. *Other path…* accepts any tty path, such as the PTY simulator. |
-| | **Simulated fault** | Demo only: no fix, RF alarm, corrupt frames, frozen epochs, silent receiver |
+| | **Simulated fault** | Demo only: no fix, RF alarm, corrupt frames, frozen epochs, silent receiver, or *Moving vehicle* (no fault: drives a 400 m loop at 11–90 km/h with a hill, for the Vehicle page) |
 | | **Capture file** | Replay only: a raw RX capture (exact bytes, mixed UBX and NMEA) |
 | Session | **Mode** | *Watch* until stopped, or *Device test* |
 | | **Duration** | Watch: seconds, 0 = until stopped. Device test: seconds observed (default 60). |
@@ -61,6 +62,22 @@ Every satellite from NAV-SAT. By default used satellites come first, then the st
 - **MON-RF:** antenna status and power, jamming state, CW suppression, noise, AGC and POST status. Antenna supervision depends on how the board wires it, so OPEN/SHORT are indications, not proof of a fault. If the jamming monitor reports state 0 (unknown or disabled), the page explains that a device test will report RF health as WARN.
 - **NAV-STATUS:** TTFF, receiver uptime, spoofing detector (an indication only).
 - **Freshness:** time since each diagnostic message last arrived, unanswered polls and rejected polls.
+
+## Vehicle
+
+![Vehicle page](screenshots/vehicle.png)
+
+A view to read at a glance on the move, for example on a tablet or laptop in a vehicle. Everything is drawn to scale with the window, from phone width to fullscreen (**F11**):
+- **Speed gauge**: the current speed over a green-to-red scale that steps up (0–60, 120, 180 … km/h or 0–40, 80 … mph) so it never pins.
+- **Compass**: north-up, with a chevron on the ring marking the **course over ground** and the direction in words (e.g. *ESE 107°*). GNSS heading only exists while moving, so below about walking pace (1 m/s) the compass says *Heading needs movement* instead.
+- **Distance**, **average speed**, **max speed** and **moving time** tiles.
+- **Altitude** above mean sea level, over a profile of the trip.
+
+Switch between **km/h** and **mph** (also miles and feet) at the top; the choice is saved. **Reset Trip** starts distance, speeds and the profile again. The trip also restarts with each session.
+
+How the trip is measured: the session counts the great-circle distance between consecutive valid, fresh navigation epochs, using the receiver's time between them. Segments below 0.5 m/s are skipped so a parked receiver's position wander is not counted as travel, and a jump that would need more than 540 km/h is treated as a glitch. The average speed is distance over moving time, so stops don't lower it. After a gap in reception (a tunnel), the straight line between the last and next fix is counted. Distances are as accurate as the positions: expect a few metres per fix, and slightly short on tight bends.
+
+Without a valid, current fix the instruments dim and say **No Fix**, **Stale** or **Waiting**; the last speed is never shown as live. While a session runs and this page is showing, the screen is kept from blanking.
 
 ## Messages
 

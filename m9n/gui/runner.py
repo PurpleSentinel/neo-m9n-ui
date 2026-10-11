@@ -77,6 +77,10 @@ class SessionRunner(GObject.Object):
     def progress(self):
         return self.controller.progress() if self.controller else None
 
+    def reset_trip(self):
+        if self.controller:
+            self.controller.reset_trip()
+
     def _detach(self):
         sources, self._sources = self._sources, []
         for source in sources:

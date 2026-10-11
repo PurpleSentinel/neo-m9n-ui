@@ -16,7 +16,8 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `controller.py` | UI-independent session lifecycle: configuration validation, source (device/demo/replay), evidence files, snapshot/issue callbacks, ordered stop and guaranteed tty release |
 | `serialize.py` | Control-character escaping and JSON serialization shared by front ends |
 | `settings.py` | Persisted session settings (`~/.config/neo-m9n/settings.json`), timestamped evidence names, per-setting validation problems |
-| `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests |
+| `trip.py` | Trip distance (haversine between valid, fresh epochs, timed by GNSS time), moving time and speeds, with stationary-jitter and glitch rejection |
+| `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests, including a moving-vehicle loop |
 
 ### Desktop front end (`m9n/gui/`)
 
@@ -28,7 +29,7 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `runner.py` | Drives `SessionController` from the GLib main loop (fd watch + tick) and re-emits its events as GObject signals |
 | `setup.py` | Session setup sidebar mirroring `SessionSettings` |
 | `pages.py`, `layout.py`, `format.py` | Page registry, base class (empty state until data) and `ColumnPage`, which flows groups into one to three columns by the page's own width; GTK-free column balancing and value formatting |
-| `dashboard.py`, `satellites.py`, `receiver.py`, `messages.py`, `logview.py`, `testpage.py`, `host.py` | The six pages and the shared bounded log list |
+| `dashboard.py`, `satellites.py`, `receiver.py`, `vehicle.py`, `messages.py`, `logview.py`, `testpage.py`, `host.py` | The seven pages and the shared bounded log list; `vehicle.py` draws its gauges with cairo and PangoCairo so they scale with the page |
 | `data/` | Desktop entry, AppStream metainfo and icons (also used from a checkout) |
 
 ## Session lifecycle

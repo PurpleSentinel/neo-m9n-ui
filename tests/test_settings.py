@@ -77,14 +77,14 @@ class SettingsTests(unittest.TestCase):
     def test_round_trip_and_tolerant_load(self):
         file = self.path / "settings.json"
         original = self.settings(source="demo", fault="frozen", baud=115200, interval=.5, json_log=True,
-                                 pinned={"json_log": "/tmp/a.jsonl"})
+                                 pinned={"json_log": "/tmp/a.jsonl"}, units="imperial")
         original.save(file)
         self.assertEqual(SessionSettings.load(file), original)
         file.write_text(json.dumps({"baud": 1234, "interval": "fast", "debug": 1, "source": "radio",
-                                    "pinned": {"bogus": 1}, "mode": "test", "unknown": True}))
+                                    "pinned": {"bogus": 1}, "mode": "test", "unknown": True, "units": "furlongs"}))
         loaded = SessionSettings.load(file)
-        self.assertEqual((loaded.baud, loaded.interval, loaded.debug, loaded.source, loaded.pinned, loaded.mode),
-                         (9600, 1.0, False, "device", {}, "test"))
+        self.assertEqual((loaded.baud, loaded.interval, loaded.debug, loaded.source, loaded.pinned, loaded.mode,
+                          loaded.units), (9600, 1.0, False, "device", {}, "test", "metric"))
         file.write_text("not json")
         self.assertEqual(SessionSettings.load(file), SessionSettings())
         self.assertEqual(SessionSettings.load(self.path / "missing.json"), SessionSettings())
