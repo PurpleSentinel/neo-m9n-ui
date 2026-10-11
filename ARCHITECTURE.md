@@ -19,6 +19,23 @@ The application is a single-process Python CLI that owns one Linux tty for a ses
 
 `SessionController` owns one session. A front end calls `on_readable()` when the tty fd is readable and `tick()` about every 100 ms; `run_until_finished()` provides that loop for the CLI. The device is opened before any evidence file is created, and every output path is validated up front. `stop()` always runs the same order: close the tty (restore termios, clear `TIOCEXCL`, release the lock), build the report or final snapshot, then write the report file, append the final JSONL record and close every file. The result is held in memory before any disk write, so a failing disk cannot discard a completed test. Tty writes are queued and never block the caller; an overdue write is a transport failure.
 
+## Desktop application lifecycle
+
+The GUI is single-threaded. `gui/runner.py` attaches the controller to the GLib main loop: a `GLib.unix_fd_add_full()` watch on the tty (IN/HUP/ERR) and a 100 ms tick (replay ticks from an idle source). The controller's `on_stopping` hook removes those sources before the descriptor is closed, so no callback can see a closed or reused fd.
+
+Every exit goes through `SessionController.stop()`:
+
+| Trigger | Behaviour |
+| --- | --- |
+| Stop button / F5 | Stop as `user_stopped` |
+| Window close, Ctrl+Q | Confirmation dialog while a session runs (a running test is recorded as INTERRUPTED), then stop and close |
+| SIGINT, SIGTERM, SIGHUP | Stop as `interrupted`, quit, exit status 128 + signal |
+| Unhandled exception | `sys.excepthook` stops the session, releases the tty and shows the error |
+| Unplug / kernel I/O error | Transport FAIL, fd released at once, disconnect banner; start a new session after re-plugging |
+| Application shutdown | Backstop: any remaining session is aborted |
+
+While a session runs the application inhibits suspend and logout. `Gtk.Application` uniqueness means a second launch only presents the existing window, so two processes never compete for the receiver.
+
 ## Communication and polling
 
 The port is opened nonblocking with read/write access, an advisory lock and kernel tty exclusivity. Raw mode disables canonical buffering and echo. Original tty attributes are restored on close where the kernel still permits it. Closing a missing/unplugged port tolerates restoration errors.

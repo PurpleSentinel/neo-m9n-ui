@@ -1,4 +1,9 @@
-"""Single-instance libadwaita application: actions, accelerators, dialogs."""
+"""Single-instance libadwaita application: actions, accelerators, dialogs, signals."""
+import logging
+import signal
+import sys
+import traceback
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -8,6 +13,7 @@ from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
 from .. import __version__  # noqa: E402
 from .window import MainWindow  # noqa: E402
 
+LOG = logging.getLogger("m9n")
 APP_ID = "io.github.PurpleSentinel.NeoM9N"
 APP_NAME = "NEO-M9N Monitor"
 SHORTCUTS = [("Session", [("Start or stop the session", "F5")]),
@@ -20,6 +26,9 @@ class Application(Adw.Application):
         # so two processes never compete for the receiver's tty.
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.DEFAULT_FLAGS)
         GLib.set_application_name(APP_NAME)
+        self.exit_status = 0
+        self._previous_excepthook = None
+        self._handling_exception = False
 
     def do_startup(self):
         Adw.Application.do_startup(self)
@@ -27,6 +36,17 @@ class Application(Adw.Application):
         self.add_simple_action("about", self.on_about)
         self.add_simple_action("shortcuts", self.on_shortcuts, ["<Control>question"])
         self.set_accels_for_action("win.toggle-session", ["F5"])
+        for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, self.on_signal, signum)
+        self._previous_excepthook = sys.excepthook
+        sys.excepthook = self.on_exception
+
+    def do_shutdown(self):
+        # Backstop for every exit path: nothing may outlive the main loop holding the tty.
+        self.abort_sessions()
+        if self._previous_excepthook:
+            sys.excepthook = self._previous_excepthook
+        Adw.Application.do_shutdown(self)
 
     def do_activate(self):
         window = self.props.active_window or MainWindow(application=self)
@@ -38,6 +58,33 @@ class Application(Adw.Application):
         self.add_action(action)
         if accels:
             self.set_accels_for_action("app." + name, accels)
+
+    def abort_sessions(self):
+        for window in self.get_windows():
+            if isinstance(window, MainWindow):
+                window.runner.abort()
+
+    def on_signal(self, signum):
+        LOG.info("Received %s; stopping the session and releasing the receiver", signal.Signals(signum).name)
+        self.exit_status = 128 + signum
+        self.abort_sessions()
+        self.quit()
+        return GLib.SOURCE_REMOVE
+
+    def on_exception(self, exc_type, exc, tb):
+        if self._handling_exception:
+            return sys.__excepthook__(exc_type, exc, tb)
+        self._handling_exception = True
+        try:
+            LOG.critical("Unhandled exception; stopping the session and releasing the receiver",
+                         exc_info=(exc_type, exc, tb))
+            self.abort_sessions()
+            window = self.props.active_window
+            if isinstance(window, MainWindow):
+                window.alert("Unexpected Error", "The session was stopped and the receiver released.\n\n"
+                             + "".join(traceback.format_exception_only(exc_type, exc)).strip())
+        finally:
+            self._handling_exception = False
 
     def on_quit(self, *_):
         # Closing goes through each window's close-request, which owns session shutdown.

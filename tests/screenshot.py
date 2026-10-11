@@ -69,7 +69,10 @@ def start():
         win.show_page(page)
     for action in actions:
         scope, name = action.split(".", 1)
-        (app if scope == "app" else win).activate_action(name, None)
+        if scope == "app":
+            app.activate_action(name, None)
+        else:
+            win.activate_action(action, None)
     GLib.timeout_add(700, shoot)
     return False
 
