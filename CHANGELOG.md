@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 (2026-10-11)
+
+A major release: maps. The new **Map** page shows your live position and track on a grid, on an opt-in online OpenStreetMap map, or on an **offline map file** made once at home, which works in a vehicle with no internet. Because the app can now go online (only when you switch the map to Online), and the Python package is renamed, this is 3.0.0.
 
 ### Added
 - **Map** page, next to Vehicle (#45):
@@ -17,6 +19,7 @@
 - **Reset Trip** also clears the map track. The screen is kept awake on the Map page too.
 
 ### Changed
+- The header page switcher's compact style now starts below about 1320sp, so eight pages fit.
 - **Privacy:** the app now makes network connections, but only in the Map page's Online mode, which you switch on yourself.
 - `libshumate` joins the Fedora package list (optional).
 - The Python package (distribution) is renamed from `neo-m9n-cli` to **`neo-m9n-monitor`**, so wheels are named `neo_m9n_monitor-…whl`. The `m9n` command, the `m9n` import package, the app ID and the install locations are unchanged. If you installed an earlier wheel with pip, run `pip uninstall neo-m9n-cli` first; both provide the same files. `scripts/install-user.py` users need do nothing.
