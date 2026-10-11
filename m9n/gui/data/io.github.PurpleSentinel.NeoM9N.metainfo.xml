@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.0.0" date="2026-10-11">
+      <description>
+        <p>Adds a Map page: your live position, accuracy and track on a grid, on an offline map file made once at home (works with no internet), or on an OpenStreetMap map you opt into after a privacy notice. The Python package is renamed neo-m9n-monitor.</p>
+      </description>
+    </release>
     <release version="2.0.1" date="2026-10-11">
       <description>
         <p>Adds a Vehicle page for use on the move: a speed gauge, a course-over-ground compass, trip distance, average and maximum speed, moving time and an altitude profile, in large instruments that scale to the window, with km/h or mph and fullscreen.</p>
