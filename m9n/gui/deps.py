@@ -21,7 +21,8 @@ def check():
     try:
         gi.require_version("Gtk", "4.0")
         gi.require_version("Adw", "1")
-        from gi.repository import Adw, Gtk
+        gi.require_version("PangoCairo", "1.0")  # Text in the Vehicle page's drawn gauges.
+        from gi.repository import Adw, Gtk, PangoCairo  # noqa: F401
     except (ImportError, ValueError) as exc:
         return f"GTK 4 or libadwaita is not available ({exc}). " + INSTALL_HINT
     gtk = (Gtk.get_major_version(), Gtk.get_minor_version())

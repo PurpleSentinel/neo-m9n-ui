@@ -48,7 +48,7 @@ class ShellTests(unittest.TestCase):
 
     def test_window_pages_actions_and_dialogs(self):
         result = self.probe("shell")
-        self.assertEqual(result["pages"], ["dashboard", "satellites", "receiver", "messages", "test", "host"])
+        self.assertEqual(result["pages"], ["dashboard", "satellites", "receiver", "vehicle", "messages", "test", "host"])
         self.assertTrue(result["empty_states"])
         self.assertTrue(result["toggle_enabled"])
         self.assertEqual(result["accels"]["app.quit"], ["<Control>q"])
@@ -122,6 +122,93 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(result["fix_title"], "No Fix")
         self.assertEqual(result["values"]["latitude"], "unknown")
         self.assertIsNone(result["clipboard"])
+
+
+class VehicleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "vehicle", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result)
+        self.assertEqual(result["exit"], 0)
+        self.assertEqual(result["empty_before"], "empty")
+        self.assertFalse(result["overflow"])
+        return result
+
+    def test_drive_shows_live_instruments_units_and_reset(self):
+        result = self.probe(M9N_FAULT="drive")
+        live = result["live"]
+        self.assertEqual((live["visible"], live["status"], live["speed_status"]), ("content", "Live", None))
+        self.assertTrue(3 * 3.6 <= live["speed"] <= 25 * 3.6, live["speed"])
+        self.assertEqual(live["unit"], "km/h")
+        self.assertIn(live["maximum"], (60, 120))
+        self.assertTrue(0 <= live["heading"] < 360)
+        self.assertRegex(live["altitude"], r"^\d+$")
+        self.assertEqual(live["altitude_unit"], "m")
+        self.assertGreater(live["trip"]["distance_m"], 10)
+        self.assertGreater(live["trip"]["moving_s"], 0)
+        self.assertGreaterEqual(live["profile"], 2)
+        distance, unit = live["tiles"]["distance"]
+        self.assertEqual(unit, "m")
+        self.assertAlmostEqual(float(distance), live["trip"]["distance_m"], delta=1)
+        self.assertEqual(live["tiles"]["average"][1], "km/h")
+        self.assertRegex(live["tiles"]["moving"][0], r"^0:0\d$")
+        self.assertEqual(result["main_orientation"], "horizontal")
+        self.assertTrue(result["idle_inhibited"])  # Screen kept on while driving with the page open.
+        idle = [entry for entry in result["inhibits"] if entry[0] == "inhibit" and entry[2] == "Vehicle display in use"]
+        self.assertEqual(len(idle), 1)
+        self.assertEqual(idle[0][1], 8)  # Gtk.ApplicationInhibitFlags.IDLE
+
+        imperial = result["imperial"]
+        self.assertEqual((imperial["unit"], imperial["altitude_unit"]), ("mph", "ft"))
+        self.assertEqual(imperial["tiles"]["distance"][1], "mi")
+        self.assertIn(imperial["maximum"], (40, 80))
+        self.assertEqual(result["saved_units"], "imperial")
+
+        self.assertEqual(result["after_reset_profile"], 0)
+        self.assertLess(result["after_reset"]["trip"]["distance_m"], live["trip"]["distance_m"])
+        self.assertLessEqual(result["after_reset"]["trip"]["epochs"], 3)
+        self.assertFalse(result["idle_after_leaving"])
+        self.assertFalse(result["idle_after_stop"])
+        # Broadway has no window manager to grant fullscreen; the button must follow the real state.
+        self.assertEqual(result["fullscreen_icon"],
+                         "view-restore-symbolic" if result["fullscreened"] else "view-fullscreen-symbolic")
+        self.assertEqual(result["fullscreen_accels"], ["F11"])
+
+    def test_no_fix_dims_the_instruments(self):
+        result = self.probe(M9N_FAULT="no-fix")
+        live = result["live"]
+        self.assertEqual((live["status"], live["speed_status"]), ("No Fix", "No Fix"))
+        self.assertIsNone(live["speed"])
+        self.assertIsNone(live["heading"])
+        self.assertEqual(live["altitude"], "–")
+        self.assertEqual(live["tiles"]["distance"], ["0", "m"])
+        self.assertEqual(live["profile"], 0)
+
+    def test_frozen_epochs_are_stale_not_live(self):
+        result = self.probe(M9N_FAULT="frozen", M9N_STALE="0.5", M9N_WAIT_MS="1800")
+        self.assertEqual(result["live"]["status"], "Stale")
+        self.assertIsNone(result["live"]["speed"])
+
+    def test_static_demo_has_speed_but_no_distance(self):
+        # The static demo reports 1.25 m/s (above the heading threshold) but never moves.
+        result = self.probe()
+        live = result["live"]
+        self.assertAlmostEqual(live["speed"], 4.5, delta=0.01)
+        self.assertEqual(live["trip"]["distance_m"], 0)
+        self.assertAlmostEqual(live["heading"], 90)
+
+    def test_phone_width_stacks_the_instruments(self):
+        result = self.probe(M9N_FAULT="drive", M9N_PROBE_WIDTH="360")
+        self.assertEqual(result["main_orientation"], "vertical")
 
 
 def many_satellites_capture(path, count=35):

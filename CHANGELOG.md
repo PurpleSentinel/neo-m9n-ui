@@ -1,5 +1,23 @@
 # Changelog
 
+## 2.0.1 (unreleased)
+
+### Added
+- **Vehicle** page, between Receiver and Messages, for reading on the move (#40):
+  - a speed gauge, a course-over-ground compass and an altitude profile
+  - distance, average speed, maximum speed and moving-time tiles
+  - large, colourful, gradient instruments that scale from phone width to fullscreen
+  - km/h or mph
+  - **Reset Trip**
+  - **Fullscreen** (F11)
+  - the screen is kept awake while a session runs on the page
+- Trip statistics are calculated by the session core from every navigation epoch, using GNSS time, so they are as accurate in a fast replay as live. Snapshots, and so the JSONL log, gain a `trip` object.
+- *Moving vehicle* demo scenario: a 400 m loop with varying speed, heading and altitude.
+
+### Changed
+- The header page switcher uses its compact style below about 1180sp, so seven pages fit.
+- PangoCairo is now checked at startup (part of Pango; no new package).
+
 ## 2.0.0 (2026-10-11)
 
 The command-line interface is replaced by a GTK 4 / libadwaita desktop application, **NEO-M9N Monitor** (`m9n`, or `python3 -m m9n` from a checkout). See epic #1.

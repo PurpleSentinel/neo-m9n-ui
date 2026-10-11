@@ -16,12 +16,13 @@ from .pages import PAGES, SessionPage
 from .runner import SessionRunner
 from .setup import SetupPanel
 from .testpage import TestPage
+from .vehicle import VehiclePage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
 PROGRESS_MS = 200
 PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
-              "messages": MessagesPage, "test": TestPage, "host": HostPage}
+              "vehicle": VehiclePage, "messages": MessagesPage, "test": TestPage, "host": HostPage}
 
 
 def default_output_dir():
@@ -29,6 +30,7 @@ def default_output_dir():
     return str(Path(documents or Path.home() / "Documents") / "NEO-M9N")
 
 NARROW = "max-width: 600sp"
+COMPACT_SWITCHER = "max-width: 1180sp"  # Seven wide page buttons no longer fit in the header.
 
 
 class MainWindow(Adw.ApplicationWindow):
@@ -86,6 +88,9 @@ class MainWindow(Adw.ApplicationWindow):
         toolbar.add_bottom_bar(switcher_bar)
         self.set_content(toolbar)
 
+        compact = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(COMPACT_SWITCHER))
+        compact.add_setter(switcher, "policy", Adw.ViewSwitcherPolicy.NARROW)
+        self.add_breakpoint(compact)
         # Narrow windows move the page switcher from the header to the bottom bar.
         breakpoint = Adw.Breakpoint.new(Adw.BreakpointCondition.parse(NARROW))
         breakpoint.add_setter(switcher_bar, "reveal", True)
@@ -112,6 +117,15 @@ class MainWindow(Adw.ApplicationWindow):
         sidebar = Gio.SimpleAction.new("toggle-sidebar", None)
         sidebar.connect("activate", lambda *_: self.split.set_show_sidebar(not self.split.get_show_sidebar()))
         self.add_action(sidebar)
+        fullscreen = Gio.SimpleAction.new("fullscreen", None)
+        fullscreen.connect("activate", lambda *_: self.unfullscreen() if self.is_fullscreen() else self.fullscreen())
+        self.add_action(fullscreen)
+        self.connect("notify::fullscreened", lambda *_: self.pages["vehicle"].set_fullscreen(self.is_fullscreen()))
+        vehicle = self.pages["vehicle"]
+        vehicle.set_units(settings.units)
+        vehicle.on_units_changed = self.on_units_changed
+        self._idle_cookie = 0
+        self.stack.connect("notify::visible-child-name", lambda *_: self.update_idle_inhibit())
         self.on_setup_changed(self.setup)
         self.connect("close-request", self.on_close_request)
 
@@ -173,6 +187,20 @@ class MainWindow(Adw.ApplicationWindow):
             GLib.source_remove(self._save_source)
         self._save_source = GLib.timeout_add(SAVE_DELAY_MS, self.save_settings)
 
+    def on_units_changed(self, units):
+        self.setup.settings.units = units
+        self.on_setup_changed(self.setup)
+
+    def update_idle_inhibit(self):
+        """Keep the screen on while the Vehicle page shows a running session."""
+        wanted = self.runner.running and self.stack.get_visible_child_name() == "vehicle"
+        if wanted and not self._idle_cookie:
+            self._idle_cookie = self.get_application().inhibit(
+                self, Gtk.ApplicationInhibitFlags.IDLE, "Vehicle display in use")
+        elif not wanted and self._idle_cookie:
+            self.get_application().uninhibit(self._idle_cookie)
+            self._idle_cookie = 0
+
     def save_settings(self):
         self._save_source = 0
         try:
@@ -219,6 +247,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._inhibit_cookie = self.get_application().inhibit(
             self, Gtk.ApplicationInhibitFlags.SUSPEND | Gtk.ApplicationInhibitFlags.LOGOUT,
             "GNSS session in progress")
+        self.update_idle_inhibit()
 
     def on_finished(self, runner, result):
         for page in self.pages.values():
@@ -237,6 +266,7 @@ class MainWindow(Adw.ApplicationWindow):
         if self._inhibit_cookie:
             self.get_application().uninhibit(self._inhibit_cookie)
             self._inhibit_cookie = 0
+        self.update_idle_inhibit()
         if result.reason == TRANSPORT_ERROR:
             self.set_banner(f"Device disconnected: {safe(result.transport_error)}. Reconnect it and start a new session.")
         elif runner.config.source == "device":

@@ -2,6 +2,8 @@
 from collections import Counter, deque
 from datetime import datetime, timezone
 
+from .trip import Trip
+
 
 RF_FRESH_S = 15  # MON-RF is polled every 5 s.
 JAMMING = {0: "unknown or monitor disabled", 1: "no interference", 2: "interference warning", 3: "critical interference"}
@@ -47,6 +49,7 @@ class State:
         self.rejected = set()
         self.receiver_errors = 0
         self.decode_errors = 0
+        self.trip = Trip()
         self.on_recent = None  # Optional callback for every receiver/parser message, in order.
 
     def ingest(self, event, now):
@@ -62,6 +65,8 @@ class State:
             if name not in self.epochs or self.epochs[name] != epoch:
                 self.epoch_changed[name] = now
             self.epochs[name] = epoch
+        if name == "NAV-PVT" or event.get("kind") == "position":
+            self.trip.update(self.navigation(now))
         if name == "ACK-NAK":
             target = event["target"]
             self.pending.pop(target, None)
@@ -140,7 +145,8 @@ class State:
                 "decode_errors": self.decode_errors, "poll_timeouts": dict(self.poll_timeouts),
                 "rejected_polls": sorted(self.rejected),
                 "message_ages_s": {k: round(now - v, 3) for k, v in self.seen.items()},
-                "issues": self.issues(now, framer), "recent_messages": list(self.recent)}
+                "issues": self.issues(now, framer), "recent_messages": list(self.recent),
+                "trip": self.trip.summary()}
 
     def issues(self, now, framer):
         issues = []

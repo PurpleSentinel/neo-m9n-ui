@@ -47,6 +47,7 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 | Dashboard | Fix status, position, altitude, accuracy, speed, course, DOP, GNSS UTC, sample and epoch-progress age, firmware identity, stream counters and active issues; copy coordinates or the snapshot as JSON |
 | Satellites | Every NAV-SAT satellite: constellation, SV, C/N0, elevation, azimuth, use in solution, signal quality, health; sortable; sky plot |
 | Receiver | MON-RF antenna/jamming/noise/AGC, NAV-STATUS TTFF/uptime/spoofing indication, diagnostic freshness, unanswered and rejected polls |
+| Vehicle | For use on the move: a speed gauge, a compass showing the course over ground, distance travelled, average and maximum speed, moving time and an altitude profile, in large colourful instruments that scale to the window; km/h or mph; fullscreen (F11) and the screen kept awake |
 | Messages | Receiver INF/TXT notices and parser errors for the whole session, and the application log (debug: RX/TX hex); filter, search, copy, save |
 | Test | Timed device test with progress and a PASS/WARN/FAIL/INTERRUPTED report you can save and copy |
 | Host | USB devices, access, `cdc_acm`, port owners, gpsd/ModemManager, udev properties; replaces `doctor`; save as JSON |
@@ -54,6 +55,8 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 Evidence files (all optional, set in the sidebar): an exact **raw RX capture**, a **JSONL snapshot log** (snapshots plus the final test report), the **application log** and the **test report**. By default they get timestamped names in `Documents/NEO-M9N`; any of them can be pinned to a specific file. Raw captures are never overwritten. **Captures and logs contain your precise location and receiver identifiers**: inspect them before sharing; `captures/`, `reports/`, `*.ubx` and `*.jsonl` are gitignored.
 
 ![Satellites page with sky plot](docs/screenshots/satellites.png)
+
+![Vehicle page](docs/screenshots/vehicle.png)
 
 The live views process every incoming frame immediately. Snapshots default to 1 Hz (the **Refresh interval** setting), and NAV-PVT is polled at 1 Hz; faster receiver output is still consumed. A lower refresh interval refreshes the display more often but does not change the receiver's measurement rate. This is a diagnostic tool, not a hard real-time control loop. **Baud rate** only matters for a USB-to-UART adapter; native USB needs no baud search.
 
@@ -85,7 +88,7 @@ Closing the window while a session runs asks first. Suspend is inhibited while a
 
 ## Try without hardware
 
-Choose **Source: Synthetic demo** (optionally with a simulated fault: no fix, RF alarm, corrupt frames, frozen epochs, silent) or **Replay capture** with a saved raw file. Demo data is labelled SYNTHETIC DEMO and replays are labelled REPLAY. To exercise the real tty code path:
+Choose **Source: Synthetic demo** (optionally with a simulated fault: no fix, RF alarm, corrupt frames, frozen epochs, silent; or *Moving vehicle*, which drives a loop for the Vehicle page) or **Replay capture** with a saved raw file. Demo data is labelled SYNTHETIC DEMO and replays are labelled REPLAY. To exercise the real tty code path:
 
 ```bash
 python3 scripts/simulate-device.py --fault no-fix

@@ -44,6 +44,7 @@ class SessionSettings:
     log_file: bool = False
     report: bool = True
     pinned: dict = field(default_factory=dict)  # Output kind -> explicit file path.
+    units: str = "metric"  # Vehicle page: "metric" or "imperial". Display only.
 
     @property
     def effective_mode(self):
@@ -144,6 +145,8 @@ class SessionSettings:
             settings.source = cls.source
         if settings.mode not in ("watch", "test"):
             settings.mode = cls.mode
+        if settings.units not in ("metric", "imperial"):
+            settings.units = cls.units
         return settings
 
     def save(self, path=None):

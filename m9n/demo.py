@@ -1,14 +1,41 @@
 """Synthetic UBX fixture generation. Never presented as actual hardware data."""
+import math
 import struct
 from .protocol import nmea, ubx
+
+ORIGIN = (54.1667070, -4.4503420)  # Latitude, longitude of the static demo fix.
+LOOP_M = 400.0  # Radius of the "drive" scenario's circuit.
+
+
+def drive(seconds):
+    """(lat, lon, speed m/s, heading deg, altitude MSL m) on a clockwise loop with varying speed.
+
+    Speed swings between 3 and 25 m/s every 90 s; the distance travelled is its exact
+    integral, so position, speed and heading stay consistent. One hill per lap.
+    """
+    speed = 14 + 11 * math.sin(2 * math.pi * seconds / 90)
+    travelled = 14 * seconds + 11 * 90 / (2 * math.pi) * (1 - math.cos(2 * math.pi * seconds / 90))
+    angle = travelled / LOOP_M
+    north, east = LOOP_M * math.cos(angle), LOOP_M * math.sin(angle)
+    lat = ORIGIN[0] + north / 111320
+    lon = ORIGIN[1] + east / (111320 * math.cos(math.radians(ORIGIN[0])))
+    return lat, lon, speed, (math.degrees(angle) + 90) % 360, 40 + 25 * math.sin(angle)
 
 
 def sample(epoch=1000, fault=None):
     p = bytearray(92)
     struct.pack_into("<IHBBBBBB", p, 0, epoch, 2026, 10, 11, 12, 0, (epoch // 1000) % 60, 7)
     p[20:24] = bytes((0 if fault == "no-fix" else 3, 0 if fault == "no-fix" else 1, 0, 10))
-    struct.pack_into("<iiiiII", p, 24, -44503420, 541667070, 45000, 10000, 1500, 2500)
-    struct.pack_into("<ii", p, 60, 1250, 9000000)
+    if fault == "drive":
+        lat, lon, speed, heading, altitude = drive((epoch - 1000) / 1000)
+        struct.pack_into("<iiiiII", p, 24, round(lon * 1e7), round(lat * 1e7), round((altitude + 35) * 1000),
+                         round(altitude * 1000), 1500, 2500)
+        struct.pack_into("<iii", p, 48, round(speed * 1000 * math.cos(math.radians(heading))),
+                         round(speed * 1000 * math.sin(math.radians(heading))), 0)
+        struct.pack_into("<ii", p, 60, round(speed * 1000), round(heading * 1e5))
+    else:
+        struct.pack_into("<iiiiII", p, 24, -44503420, 541667070, 45000, 10000, 1500, 2500)
+        struct.pack_into("<ii", p, 60, 1250, 9000000)
     struct.pack_into("<H", p, 76, 125)
     sats = bytearray(struct.pack("<IBBH", epoch, 1, 4, 0))
     for gnss, sv, cno in ((0, 3, 42), (2, 12, 39), (3, 5, 35), (6, 2, 31)):

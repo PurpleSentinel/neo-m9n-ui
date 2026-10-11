@@ -44,6 +44,7 @@ Every snapshot has `schema_version`, `kind: snapshot`, host UTC, elapsed monoton
 | `rejected_polls` | array | Targets NAKed and not subsequently observed |
 | `issues` | array of strings | Human-readable current issues and session integrity warnings |
 | `recent_messages` | array | Up to 20 receiver/parser notices, including severity and host UTC |
+| `trip` | object | Since the session started or the trip was reset: `distance_m`, `moving_s`, `average_speed_m_s` (distance over moving time; null before any movement), `max_speed_m_s` (null without a speed), `epochs` (distinct valid fixes counted). Added in 2.0.1. |
 
 Counter keys are sparse: absent means zero, not unsupported. Missing position/diagnostic values are null or absent, never fabricated zeroes. Use `fix_ok && fresh` before treating coordinates as current. Diagnostic arrays can retain old values, so check their ages before using them. Frozen PVT retains old coordinates with `fresh: false`.
 

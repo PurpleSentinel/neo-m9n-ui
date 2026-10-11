@@ -23,7 +23,7 @@ FORMATTER = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 
 SOURCES = ("device", "demo", "replay")
 MODES = ("watch", "test")
-FAULTS = ("no-fix", "rf", "corrupt", "frozen", "silent")
+FAULTS = ("no-fix", "rf", "corrupt", "frozen", "silent", "drive")  # "drive" is motion, not a fault.
 
 COMPLETED = "completed"
 USER_STOPPED = "user_stopped"
@@ -216,6 +216,11 @@ class SessionController:
             self._jsonl = config.json_log.open("a", encoding="utf-8")
         if config.raw_log:
             self._raw = config.raw_log.open("xb")
+
+    def reset_trip(self):
+        """Start trip distance and speed statistics again from the next epoch."""
+        if self.session:
+            self.session.state.trip.reset()
 
     def progress(self, now=None):
         """Fraction complete for replay or a timed session, otherwise None."""
