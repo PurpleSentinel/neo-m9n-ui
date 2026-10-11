@@ -106,7 +106,8 @@ An offline map file holds a whole region's map, made once at home from OpenStree
    - **What it contacts:** before starting, it lists every host it will contact and asks you to confirm. These are the container registry and the data download sites (Geofabrik, osmdata.openstreetmap.de, Natural Earth, GitHub). They see your IP address and the area you chose.
    - **Output:** the map goes to `Documents/NEO-M9N/maps/<area>.mbtiles`.
    - **Size and time:** a county or small country takes minutes. Great Britain takes longer and needs several GB of free memory and around 10–20 GB of free disk while building. The finished file is much smaller, from a few MB to a few GB.
-   - **Options:** `--dry-run` shows the plan without downloading anything. `--keep-downloads` keeps the roughly 1.3 GB of supporting data for faster rebuilds.
+   - **Progress:** it shows short steps (downloading, reading, writing the map file). Planetiler's full output goes to `~/.cache/neo-m9n/offline-map-build/planetiler.log`; if a build fails, the script shows the end of that log.
+   - **Options:** `--dry-run` shows the plan without downloading anything. `--keep-downloads` keeps the roughly 1.3 GB of supporting data for faster rebuilds. `--verbose` shows Planetiler's full output.
 2. **Choose it:** on the Map page, open **Map storage** (the disk button), then **Offline map file → Choose…**. The page shows the map's name, data date, zoom range and size.
 3. **Use it:** select **Offline**. The page shows *Offline: <name>, data <date>*.
 
