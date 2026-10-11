@@ -12,7 +12,7 @@ import gi  # noqa: E402
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, GLib  # noqa: E402
+from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
 from m9n.controller import SessionConfig  # noqa: E402
 from m9n.gui.app import Application  # noqa: E402
@@ -203,6 +203,46 @@ def dashboard(win):
         result["after_stop_visible"] = page.stack.get_visible_child_name()
         later(100, app.quit)
     later(int(os.environ.get("M9N_WAIT_MS", "1300")), inspect)
+
+
+def satellites(win):
+    page = win.pages["satellites"]
+    capture = os.environ.get("M9N_CAPTURE")
+    if capture:
+        config = SessionConfig(source="replay", capture=Path(capture))
+    else:
+        config = SessionConfig(source="demo", fault=os.environ.get("M9N_FAULT") or None)
+
+    def rows():
+        model = page.selection
+        return [(model.get_item(i).data["gnss"], model.get_item(i).data["sv"]) for i in range(model.get_n_items())]
+
+    def first_refresh():
+        result["inner"] = page.inner.get_visible_child_name()
+        result["nodata_text"] = page.nodata.get_description()
+        result["rows"] = rows()
+        result["summary"] = page.summary.get_label()
+        result["constellations"] = page.constellations.get_label()
+        result["sky_points"] = len(page.sky.satellites)
+        result["used"] = sum(item.data["used"] for item in page.items.values())
+        if capture or not result["rows"]:
+            win.runner.stop() if win.runner.running else None
+            return later(100, app.quit)
+        page.selection.set_selected(2)
+        result["selected_before"] = rows()[2]
+        later(2200, after_refreshes)
+
+    def after_refreshes():
+        position = page.selection.get_selected()
+        result["selected_after"] = rows()[position] if position != Gtk.INVALID_LIST_POSITION else None
+        result["refreshes"] = page.store.get_n_items()
+        sv_column = page.view.get_columns().get_item(1)
+        page.view.sort_by_column(sv_column, Gtk.SortType.ASCENDING)
+        result["sorted_by_sv"] = rows()
+        win.runner.stop()
+        later(100, app.quit)
+    win.start_session(config)
+    later(1300, first_refresh)
 
 
 def on_activate(_app):

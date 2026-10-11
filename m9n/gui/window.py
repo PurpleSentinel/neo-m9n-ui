@@ -8,13 +8,14 @@ from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, 
 from ..serialize import safe
 from ..settings import SessionSettings
 from .dashboard import DashboardPage
+from .satellites import SatellitesPage
 from .pages import PAGES, SessionPage
 from .runner import SessionRunner
 from .setup import SetupPanel
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
-PAGE_TYPES = {"dashboard": DashboardPage}
+PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage}
 
 
 def default_output_dir():
@@ -79,6 +80,7 @@ class MainWindow(Adw.ApplicationWindow):
         breakpoint.add_setter(switcher, "visible", False)
         breakpoint.add_setter(self.split, "collapsed", True)
         breakpoint.add_setter(self.split, "show-sidebar", False)
+        breakpoint.add_setter(self.pages["satellites"].layout, "orientation", Gtk.Orientation.VERTICAL)
         self.add_breakpoint(breakpoint)
 
         self.runner = SessionRunner()

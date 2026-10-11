@@ -122,6 +122,61 @@ class DashboardTests(unittest.TestCase):
         self.assertIsNone(result["clipboard"])
 
 
+def many_satellites_capture(path, count=35):
+    """Synthetic NAV-SAT with mixed constellations, signal levels and one unknown position."""
+    import struct
+    from m9n.demo import sample
+    from m9n.protocol import ubx
+    payload = bytearray(struct.pack("<IBBH", 5000, 1, count, 0))
+    for i in range(count):
+        elevation = -91 if i == count - 1 else (i * 7) % 90
+        flags = 8 | 5 | (1 << 4) if i % 3 else 2
+        payload += struct.pack("<BBBbhhI", i % 7, i + 1, 20 + i % 25, elevation, (i * 37) % 360, 0, flags)
+    path.write_bytes(sample() + ubx(1, 53, bytes(payload)))
+
+
+class SatelliteTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "satellites", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_live_table_order_selection_and_sorting(self):
+        result = self.probe()
+        self.assertEqual(result["inner"], "table")
+        # Used first, then strongest C/N0 (42, 39, 35, 31 dB-Hz in the demo).
+        self.assertEqual(result["rows"], [["GPS", 3], ["Galileo", 12], ["BeiDou", 5], ["GLONASS", 2]])
+        self.assertIn("4 satellites tracked · 4 used", result["summary"])
+        self.assertEqual(result["constellations"], "BeiDou 1/1 · GLONASS 1/1 · GPS 1/1 · Galileo 1/1")
+        self.assertEqual(result["selected_after"], result["selected_before"])  # Survives refreshes.
+        self.assertEqual([sv for _, sv in result["sorted_by_sv"]], [2, 3, 5, 12])
+
+    def test_replay_with_many_satellites(self):
+        with tempfile.TemporaryDirectory() as d:
+            capture = Path(d) / "many.ubx"
+            many_satellites_capture(capture)
+            result = self.probe(M9N_CAPTURE=str(capture))
+        self.assertEqual(len(result["rows"]), 35)
+        self.assertIn("35 satellites tracked · 23 used", result["summary"])
+        self.assertEqual(result["used"], 23)
+        self.assertEqual(result["sky_points"], 34)  # The unknown-position satellite is not plotted.
+
+    def test_silent_receiver_shows_no_data(self):
+        result = self.probe(M9N_FAULT="silent")
+        self.assertEqual(result["inner"], "nodata")
+        self.assertIn("not evidence of a hardware fault", result["nodata_text"])
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:
