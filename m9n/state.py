@@ -47,6 +47,7 @@ class State:
         self.rejected = set()
         self.receiver_errors = 0
         self.decode_errors = 0
+        self.on_recent = None  # Optional callback for every receiver/parser message, in order.
 
     def ingest(self, event, now):
         name = event["name"]
@@ -74,8 +75,11 @@ class State:
         if severity == "ERROR" and event["protocol"] != "ERROR":
             self.receiver_errors += 1
         if "text" in event or name == "ACK-NAK":
-            self.recent.append({"host_utc": host_utc(), "severity": severity,
-                                "name": name, "text": event.get("text", "Rejected poll: " + event.get("target", ""))})
+            entry = {"host_utc": host_utc(), "severity": severity,
+                     "name": name, "text": event.get("text", "Rejected poll: " + event.get("target", ""))}
+            self.recent.append(entry)
+            if self.on_recent:
+                self.on_recent(entry)
 
     def fresh(self, name, now, limit=None):
         return name in self.seen and now - self.seen[name] <= (self.stale_after if limit is None else limit)

@@ -20,6 +20,7 @@ class SessionRunner(GObject.Object):
         "started": (GObject.SignalFlags.RUN_LAST, None, ()),
         "snapshot": (GObject.SignalFlags.RUN_LAST, None, (object,)),
         "issue": (GObject.SignalFlags.RUN_LAST, None, (str, str)),
+        "message": (GObject.SignalFlags.RUN_LAST, None, (object,)),
         "finished": (GObject.SignalFlags.RUN_LAST, None, (object,)),
     }
 
@@ -43,7 +44,8 @@ class SessionRunner(GObject.Object):
         controller = SessionController(config, on_snapshot=lambda s: self.emit("snapshot", s),
                                        on_issue=lambda kind, text: self.emit("issue", kind, text),
                                        on_finished=lambda result: self.emit("finished", result),
-                                       on_stopping=self._detach)
+                                       on_stopping=self._detach,
+                                       on_message=lambda entry: self.emit("message", entry))
         controller.start()
         self.controller = controller
         fd = controller.fileno()

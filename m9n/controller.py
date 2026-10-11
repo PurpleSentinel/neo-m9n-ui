@@ -140,10 +140,11 @@ def validate(config):
 
 class SessionController:
     def __init__(self, config, clock=time.monotonic, on_snapshot=None, on_issue=None, on_finished=None,
-                 on_stopping=None):
+                 on_stopping=None, on_message=None):
         self.config = config
         self.clock = clock
         self.on_stopping = on_stopping
+        self.on_message = on_message
         self.on_snapshot = on_snapshot
         self.on_issue = on_issue
         self.on_finished = on_finished
@@ -186,6 +187,7 @@ class SessionController:
         self.started = self.clock()
         self._next_display = self._next_demo = self.started
         self.session = Session(self.started, config.stale_after, config.passive or self.port is None, self.source)
+        self.session.state.on_recent = self.on_message
         self.state = "running"
         if self.port:
             LOG.info("Opened %s; %s", self.source,

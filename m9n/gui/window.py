@@ -8,6 +8,7 @@ from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, 
 from ..serialize import safe
 from ..settings import SessionSettings
 from .dashboard import DashboardPage
+from .messages import MessagesPage
 from .receiver import ReceiverPage
 from .satellites import SatellitesPage
 from .pages import PAGES, SessionPage
@@ -16,7 +17,8 @@ from .setup import SetupPanel
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
-PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage}
+PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
+              "messages": MessagesPage}
 
 
 def default_output_dir():
@@ -89,6 +91,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.runner.connect("finished", self.on_finished)
         self.runner.connect("snapshot", self.on_snapshot)
         self.runner.connect("issue", self.on_issue)
+        self.runner.connect("message", lambda _runner, entry: self.pages["messages"].add_message(entry))
         self._issue_toasts = {}
         self._inhibit_cookie = 0
         self._close_after_stop = False
