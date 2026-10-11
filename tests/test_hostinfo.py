@@ -108,5 +108,35 @@ class DiagnosticsTests(unittest.TestCase):
         self.assertFalse(hostinfo.accessible(None))
 
 
+class PresentationTests(unittest.TestCase):
+    def test_udev_rule_matches_repository_file(self):
+        rules = (Path(__file__).resolve().parents[1] / "udev/70-ublox-gnss.rules").read_text().splitlines()
+        self.assertIn(hostinfo.UDEV_RULE, rules)
+        commands = hostinfo.udev_install_commands()
+        self.assertIn(hostinfo.UDEV_RULE, commands[0])
+        self.assertTrue(commands[0].endswith("sudo tee " + hostinfo.UDEV_RULE_PATH))
+
+    def test_unit_states(self):
+        command = ["systemctl", "is-active", "gpsd.service", "gpsd.socket"]
+        result = hostinfo.command_result(command, exit_code=3, stdout="inactive\nactive\n")
+        self.assertEqual(hostinfo.unit_states(result), [("gpsd.service", "inactive"), ("gpsd.socket", "active")])
+        self.assertIsNone(hostinfo.unit_states(hostinfo.command_result(command, available=False)))
+        self.assertIsNone(hostinfo.unit_states(hostinfo.command_result(command, error="timed out")))
+
+    def test_modemmanager_ignore_flag(self):
+        udev = hostinfo.command_result(["udevadm"], exit_code=0, stdout="ID_VENDOR_ID=1546\nID_MM_DEVICE_IGNORE=1\n")
+        self.assertTrue(hostinfo.modemmanager_ignores({"udev": udev}))
+        udev = hostinfo.command_result(["udevadm"], exit_code=0, stdout="ID_MM_DEVICE_IGNORE=0\n")
+        self.assertFalse(hostinfo.modemmanager_ignores({"udev": udev}))
+        self.assertFalse(hostinfo.modemmanager_ignores({}))
+
+    def test_owners(self):
+        command = ["fuser", "-v", "/dev/ttyACM0"]
+        self.assertEqual(hostinfo.owners_text(hostinfo.command_result(command, exit_code=1)), "none")
+        self.assertEqual(hostinfo.owners_text(hostinfo.command_result(command, available=False)), "fuser not installed")
+        busy = hostinfo.command_result(command, exit_code=0, stderr="USER PID ACCESS COMMAND\n/dev/ttyACM0: gpsd")
+        self.assertIn("gpsd", hostinfo.owners_text(busy))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,6 +19,41 @@ HINTS = ["Use a USB data cable and connect the GNSS board's USB port.",
          "If another process owns the port, stop only the relevant gpsd service/socket or exclude this device from ModemManager.",
          "No position fix alone does not establish a hardware fault; check antenna and sky view."]
 
+UDEV_RULE_PATH = "/etc/udev/rules.d/70-ublox-gnss.rules"
+# Same rule as udev/70-ublox-gnss.rules in the repository (a test keeps them identical).
+UDEV_RULE = 'SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"'
+
+
+def udev_install_commands():
+    """Commands the user runs themselves; the application never escalates privileges."""
+    return [f"echo '{UDEV_RULE}' | sudo tee {UDEV_RULE_PATH}",
+            "sudo udevadm control --reload-rules",
+            "# Then unplug and reconnect the receiver."]
+
+
+def unit_states(result):
+    """Pair `systemctl is-active` output lines with their units, or None if unavailable."""
+    if not result.get("available") or "exit_code" not in result:
+        return None
+    units = [arg for arg in result["command"][2:]]
+    lines = result["output"].splitlines()
+    return [(unit, lines[i] if i < len(lines) else "unknown") for i, unit in enumerate(units)]
+
+
+def owners_text(result):
+    """`fuser -v` exits 1 with no output when no process holds the port."""
+    if not result.get("available"):
+        return "fuser not installed"
+    if result.get("exit_code") == 1 and not result["output"]:
+        return "none"
+    return result["output"] or "none"
+
+
+def modemmanager_ignores(document):
+    """True when udev marks the selected port ID_MM_DEVICE_IGNORE=1, so ModemManager leaves it alone."""
+    udev = document.get("udev") or {}
+    return "ID_MM_DEVICE_IGNORE=1" in udev.get("output", "").splitlines()
+
 
 def by_id_aliases(dev_root=Path("/dev")):
     """Map each real tty path to its stable /dev/serial/by-id names."""

@@ -314,6 +314,60 @@ class DeviceTestPageTests(unittest.TestCase):
         self.assertIn("USB transport", result["checks"])
 
 
+FAKE_TOOLS = {
+    "systemctl": 'case "$2" in gpsd.service) printf "inactive\\ninactive\\n"; exit 3;; *) echo active;; esac',
+    "udevadm": 'printf "ID_VENDOR_ID=1546\\nID_MM_DEVICE_IGNORE=1\\n"',
+    "fuser": "sleep 10",  # Exceeds the 3 s command timeout.
+}
+
+
+class HostPageTests(unittest.TestCase):
+    def run_host(self, session_port=None):
+        with headless_display() as env, tempfile.TemporaryDirectory() as d:
+            fake = Path(d) / "bin"
+            fake.mkdir()
+            for name, body in FAKE_TOOLS.items():
+                tool = fake / name
+                tool.write_text("#!/bin/sh\n" + body + "\n")
+                tool.chmod(0o755)
+            for name in ("sh", "sleep", "printf"):
+                (fake / name).symlink_to(__import__("shutil").which(name))
+            port = session_port or str(Path(d) / "ttyACM0")
+            if not session_port:
+                Path(port).touch(mode=0)  # Exists but not accessible: shows the Grant Access commands.
+            extra = {"M9N_SESSION_PORT": session_port} if session_port else {}
+            process, result = run_probe(env, "host", M9N_HOST_PORT=port, M9N_FAKE_PATH=str(fake), M9N_OUT=d, **extra)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_diagnostics_without_access(self):
+        result = self.run_host()
+        self.assertEqual(result["keys"], ["python", "kernel", "platform", "devices", "selected_port",
+                                          "read_write_access", "selection_error", "cdc_acm_loaded", "lsusb",
+                                          "gpsd", "modemmanager", "hints", "udev", "owners"])
+        checks, icons = result["checks"], result["check_icons"]
+        self.assertIn("no: see Grant Access", checks["access"])
+        self.assertTrue(result["fix_visible"])
+        self.assertEqual(checks["gpsd"], "gpsd.service: inactive, gpsd.socket: inactive")
+        self.assertIn("udev tells it to ignore this receiver", checks["modemmanager"])
+        self.assertEqual(icons["modemmanager"], "object-select-symbolic")
+        self.assertEqual(checks["owners"], "timed out")
+        self.assertEqual(result["outputs"]["lsusb"], "not installed")
+        self.assertEqual(result["outputs"]["owners"], "did not complete")
+        self.assertEqual(len(result["devices"]), 2)
+        self.assertLess(result["max_gap_ms"], 500)  # The window kept running during the slow command.
+        self.assertEqual(result["tty_fds"], 0)  # Host checks never open the tty.
+        self.assertTrue(result["saved"])
+
+    def test_works_while_a_session_holds_the_device(self):
+        with Receiver() as receiver:
+            result = self.run_host(session_port=receiver.port)
+        self.assertEqual(result["tty_fds"], 1)  # Only the session's descriptor.
+        self.assertEqual(result["checks"]["access"], "yes")
+        self.assertFalse(result["fix_visible"])
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:
