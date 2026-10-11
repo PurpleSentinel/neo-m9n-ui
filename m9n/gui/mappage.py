@@ -2,19 +2,22 @@
 
 Modes: "off" (default) draws a coordinate grid locally and never uses the network;
 "online" shows OpenStreetMap tiles after informed consent, only for the visible area and
-only while this page is showing. OpenStreetMap does not permit offline use of its tiles,
-so the online cache is never shown offline.
+only while this page is showing; "offline" draws a local offline map file (made with
+scripts/make-offline-map.sh) and never uses the network. OpenStreetMap does not permit
+offline use of its tiles, so the online cache is never shown offline.
 
 libshumate provides the map widget (pan, zoom, scale, attribution). If it is missing the
 page still draws the track on a grid fitted to it and explains how to install it.
 """
 import math
 import os
+from pathlib import Path
 
 import cairo
 import gi
-from gi.repository import Adw, GLib, Gtk, Pango
+from gi.repository import Adw, Gio, GLib, Gtk, Pango
 
+from ..mbtiles import MapFile, MapFileError
 from . import format as fmt
 from .pages import SessionPage
 from .vehicle import HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text
@@ -29,11 +32,14 @@ try:
 except (ImportError, ValueError):
     Shumate = tiles = None
 
-MODES = ("off", "online")
+MODES = ("off", "online", "offline")
 FOLLOW_ZOOM = 16
 MAX_TRACK = 5000  # Points kept; older halves are thinned when full.
 INSTALL_HINT = "sudo dnf install libshumate"
 TEST_URL = os.environ.get("M9N_TILE_URL")  # Tests only: honoured for a loopback tile server, nothing else.
+STYLE_TILES_URL = None  # Tests only: the style's placeholder tile URL, to prove it is never fetched.
+NO_MAP_FILE = ("No offline map file chosen. Make one at home with scripts/make-offline-map.sh (see the user "
+               "guide), then choose it here.")
 CONSENT = (
     "The map will download map images (tiles) from OpenStreetMap's tile servers, run by the OpenStreetMap "
     "Foundation, and any content delivery network they use.\n\n"
@@ -125,8 +131,12 @@ class MapOverlay(Gtk.DrawingArea):
         projection = page.projection(width, height)
         if projection is None:
             return
-        if page.mode == "off" or page.simple_map is None:
+        outside = page.outside_offline_map(projection, width, height)
+        if page.mode == "off" or page.simple_map is None or outside:
             self.draw_grid(cr, projection, width, height)
+        if outside:
+            draw_text(self, cr, "Outside offline map", width / 2, height - 30, 13, weight=Pango.Weight.BOLD,
+                      rgba=self.fg(0.6), numeric=False)
         self.draw_track(cr, projection)
         self.draw_marker(cr, projection)
         if page.dimmed:
@@ -251,6 +261,9 @@ class MapPage(SessionPage):
         self.following = True
         self.page_visible = False
         self.online = None  # tiles.OnlineTiles while online
+        self.offline = None  # tiles.OfflineTiles while offline
+        self.map_file = None  # m9n.mbtiles.MapFile, once chosen
+        self.load_error = None
         self.cache_limit_mb = 200
         self._epoch = None
         self._moving_map = False
@@ -267,15 +280,18 @@ class MapPage(SessionPage):
         modes = Gtk.Box(valign=Gtk.Align.CENTER)
         modes.add_css_class("linked")
         for key, label, tooltip in (("off", "Off", "Grid only: no network"),
-                                    ("online", "Online", "OpenStreetMap tiles (asks first)")):
+                                    ("online", "Online", "OpenStreetMap tiles (asks first)"),
+                                    ("offline", "Offline", "Offline map file: no network")):
             button = Gtk.ToggleButton(label=label, tooltip_text=tooltip,
                                       group=self.mode_buttons.get("off"))
             button.connect("toggled", self.on_mode_toggled, key)
             modes.append(button)
             self.mode_buttons[key] = button
         self.mode_buttons["off"].set_active(True)
+        self.mode_buttons["offline"].set_sensitive(False)
         self.indicator = Gtk.Box(spacing=6, valign=Gtk.Align.CENTER, visible=False)
-        self.indicator.append(Gtk.Image(icon_name="network-transmit-receive-symbolic"))
+        self.indicator_icon = Gtk.Image(icon_name="network-transmit-receive-symbolic")
+        self.indicator.append(self.indicator_icon)
         self.indicator_label = Gtk.Label(label="Online: OpenStreetMap")
         self.indicator.append(self.indicator_label)
         self.indicator.add_css_class("accent")
@@ -287,7 +303,7 @@ class MapPage(SessionPage):
         self.fullscreen_button = Gtk.Button(icon_name="view-fullscreen-symbolic", action_name="win.fullscreen",
                                             valign=Gtk.Align.CENTER, tooltip_text="Fullscreen (F11)")
         self.fullscreen_button.update_property([Gtk.AccessibleProperty.LABEL], ["Toggle fullscreen"])
-        toolbar = Gtk.Box(spacing=8, margin_top=12, margin_bottom=6, margin_start=12, margin_end=12)
+        toolbar = self.toolbar = Gtk.Box(spacing=8, margin_top=12, margin_bottom=6, margin_start=12, margin_end=12)
         toolbar.append(self.status)
         toolbar.append(modes)
         toolbar.append(self.indicator)
@@ -333,7 +349,9 @@ class MapPage(SessionPage):
         content.append(overlay)
         self.adaptive = Adw.BreakpointBin(child=content, width_request=280, height_request=200)
         compact = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 520sp"))
-        compact.add_setter(self.indicator_label, "visible", False)  # The icon alone still shows "online".
+        compact.add_setter(self.indicator_label, "visible", False)  # The icon alone still shows the mode.
+        compact.add_setter(self.fullscreen_button, "visible", False)  # F11 still works; phones rarely need it.
+        compact.add_setter(self.toolbar, "spacing", 4)
         self.adaptive.add_breakpoint(compact)
         return self.adaptive
 
@@ -356,7 +374,20 @@ class MapPage(SessionPage):
         self.clear_button = Gtk.Button(label="Clear Map Cache")
         self.clear_button.add_css_class("destructive-action")
         self.clear_button.connect("clicked", self.clear_cache)
-        for widget in (title, self.cache_usage, note, limit_row, self.clear_button):
+        offline_title = Gtk.Label(label="Offline map file", xalign=0, margin_top=8)
+        offline_title.add_css_class("heading")
+        self.map_file_label = Gtk.Label(xalign=0, wrap=True, max_width_chars=40, selectable=True, label=NO_MAP_FILE)
+        self.map_file_label.add_css_class("caption")
+        file_buttons = Gtk.Box(spacing=8)
+        choose = Gtk.Button(label="Choose…", hexpand=True)
+        choose.connect("clicked", self.choose_map_file)
+        self.remove_button = Gtk.Button(label="Remove", hexpand=True, sensitive=False,
+                                        tooltip_text="Stop using this file (it isn't deleted)")
+        self.remove_button.connect("clicked", lambda _b: self.set_map_file(None))
+        file_buttons.append(choose)
+        file_buttons.append(self.remove_button)
+        for widget in (title, self.cache_usage, note, limit_row, self.clear_button, Gtk.Separator(margin_top=4),
+                       offline_title, self.map_file_label, file_buttons):
             box.append(widget)
         popover = Gtk.Popover(child=box)
         popover.connect("show", lambda _p: self.show_usage())
@@ -372,14 +403,20 @@ class MapPage(SessionPage):
         self.cache_limit_mb = settings.map_cache_mb
         self.limit.set_value(settings.map_cache_mb)
         self.settings = settings
+        if settings.map_offline_file:
+            self.set_map_file(settings.map_offline_file, quiet=True)
         if settings.map_mode == "online" and settings.map_consented and Shumate:
             self.set_mode("online")
+        elif settings.map_mode == "offline" and self.map_file and Shumate:
+            self.set_mode("offline")
         self.on_settings_changed = on_changed
+        Adw.StyleManager.get_default().connect("notify::dark", self.on_style_changed)
 
     def save(self):
         if self.settings and self.on_settings_changed:
             self.settings.map_mode = self.mode
             self.settings.map_cache_mb = int(self.cache_limit_mb)
+            self.settings.map_offline_file = str(self.map_file.path) if self.map_file else ""
             self.on_settings_changed()
 
     def on_mode_toggled(self, button, key):
@@ -417,17 +454,92 @@ class MapPage(SessionPage):
             self.online.set_enabled(False)
             self.online.cache.close()
             self.online = None
+        self.offline = None
+        if mode == "offline" and not self.map_file:
+            mode = "off"
         if mode == "online":
             renderer, self.online = tiles.osm_renderer(self.cache_limit_mb, tiles.loopback_url(TEST_URL))
             self.simple_map.set_map_source(renderer)
             self.online.set_enabled(self.page_visible)
+            self.indicator_icon.set_from_icon_name("network-transmit-receive-symbolic")
+            self.indicator_label.set_label("Online: OpenStreetMap")
+        elif mode == "offline":
+            renderer, self.offline = tiles.offline_renderer(self.map_file, Adw.StyleManager.get_default().get_dark(),
+                                                            STYLE_TILES_URL)
+            self.simple_map.set_map_source(renderer)
+            self.indicator_icon.set_from_icon_name("network-offline-symbolic")
+            self.indicator_label.set_label(f"Offline: {self.map_file.name}, data {self.map_file.data_date:%Y-%m-%d}")
         else:
             self.simple_map.set_map_source(self.blank_source())
         self.mode = mode
         self.mode_buttons[mode].set_active(True)
-        self.indicator.set_visible(mode == "online")
+        self.indicator.set_visible(mode != "off")
+        self.indicator.update_property([Gtk.AccessibleProperty.LABEL], [self.indicator_label.get_label()])
         self.overlay_area.queue_draw()
         self.save()
+
+    def on_style_changed(self, *_):
+        if self.mode == "offline":
+            self.set_mode("offline")  # Redraw with the light or dark style.
+
+    # Offline map file ----------------------------------------------------
+
+    def choose_map_file(self, _button=None):
+        dialog = Gtk.FileDialog(title="Choose an Offline Map File", modal=True)
+        maps = Gtk.FileFilter(name="Offline maps (*.mbtiles)")
+        maps.add_pattern("*.mbtiles")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(maps)
+        dialog.set_filters(filters)
+        documents = GLib.get_user_special_dir(GLib.UserDirectory.DIRECTORY_DOCUMENTS) or str(Path.home())
+        default = Path(documents) / "NEO-M9N" / "maps"  # Where make-offline-map.sh writes maps.
+        if default.is_dir():
+            dialog.set_initial_folder(Gio.File.new_for_path(str(default)))
+        self.storage.popdown()
+        dialog.open(self.get_root(), None, self.on_map_file_chosen)
+
+    def on_map_file_chosen(self, dialog, result):
+        try:
+            path = dialog.open_finish(result).get_path()
+        except GLib.Error:
+            return  # Cancelled.
+        self.set_map_file(path)
+
+    def set_map_file(self, path, quiet=False):
+        """Use an offline map file (None stops using it); returns True if it can be used."""
+        if self.map_file:
+            self.map_file.close()
+        self.map_file, error = None, None
+        if path:
+            try:
+                self.map_file = MapFile(path)
+            except MapFileError as exc:
+                error = str(exc)
+        self.mode_buttons["offline"].set_sensitive(bool(self.map_file) and Shumate is not None)
+        self.remove_button.set_sensitive(bool(self.map_file))
+        if self.map_file:
+            info = self.map_file.summary()
+            self.map_file_label.set_label(
+                f"{info['name']}: map data from {info['data_date']}, zoom {info['min_zoom']}–{info['max_zoom']}, "
+                f"{GLib.format_size(info['size'])}.\n{info['path']}\nRead locally; nothing is downloaded.")
+        else:
+            self.map_file_label.set_label(f"{error}\n\n{NO_MAP_FILE}" if error else NO_MAP_FILE)
+        if self.mode == "offline":
+            self.set_mode("offline" if self.map_file else "off")
+        else:
+            self.save()
+        window = self.get_root()
+        if error and not quiet and hasattr(window, "alert"):
+            window.alert("Offline Map Not Usable", error)
+        elif error and quiet:
+            self.load_error = error
+        return self.map_file is not None
+
+    def outside_offline_map(self, projection, width, height):
+        if self.mode != "offline" or not self.map_file or self.simple_map is None:
+            return False
+        lat, lon = projection.to_location(width / 2, height / 2)
+        return not self.map_file.covers(lat, lon)
 
     def set_page_visible(self, visible):
         """Tiles are only requested while this page is on screen."""

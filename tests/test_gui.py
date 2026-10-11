@@ -293,6 +293,30 @@ class MapTests(unittest.TestCase):
         self.assertEqual(result["saved_later"], "online")
         settings.unlink()
 
+    def test_offline_map_file(self):
+        process, result = run_probe(self.env, "map_offline", timeout=40)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result)
+        self.assertFalse(result["offline_sensitive_before"])  # Offline needs a map file.
+        self.assertFalse(result["bad_file"])
+        self.assertIn("Raster", result["bad_label"])
+        self.assertTrue(result["good_file"])
+        self.assertTrue(result["offline_sensitive"])
+        self.assertEqual((result["mode"], result["source"]), ("offline", "offline"))
+        self.assertEqual(result["indicator"], "Offline: Test Map, data 2026-10-08")
+        self.assertEqual(result["license"], "© OpenMapTiles © OpenStreetMap contributors")
+        # Drawn from the file; zero network: no HTTP session, and the style's tile URL is never fetched.
+        self.assertGreater(result["tiles_served"], 0)
+        self.assertEqual(result["sessions"], 0)
+        self.assertEqual(result["style_url_requests"], 0)
+        self.assertEqual(result["style_url_requests_after"], 0)
+        self.assertTrue(result["inside"])
+        self.assertTrue(result["outside"])
+        self.assertTrue(result["dark_rebuilt"])
+        self.assertEqual(result["saved"][0], "offline")
+        self.assertTrue(result["saved"][1].endswith("test.mbtiles"))
+        self.assertEqual(result["after_remove"], ["off", False, ""])
+
     def test_phone_width(self):
         result = self.probe(M9N_PROBE_WIDTH="360", M9N_MAP_QUICK="1")
         self.assertEqual(result["live"]["status"], "Live")

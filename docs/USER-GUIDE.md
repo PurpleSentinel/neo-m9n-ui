@@ -87,6 +87,7 @@ Your live position on a map: a marker that becomes an arrow pointing along your 
 
 Choose how the map is drawn at the top of the page:
 - **Off** (default): the position and track on a coordinate grid, with a scale bar. Nothing leaves your computer.
+- **Offline**: a real map from an **offline map file** on your computer (see below). Nothing leaves your computer; this is the mode for a vehicle without internet.
 - **Online**: an OpenStreetMap map. The first time, a notice explains exactly what is shared, and nothing changes unless you accept:
   - **Sent:** your IP address, and which map tiles you view (zoomed in, roughly where you are), to OpenStreetMap's tile servers.
   - **Never sent:** coordinates, your track or anything about the receiver.
@@ -95,6 +96,28 @@ Choose how the map is drawn at the top of the page:
 Online tiles are requested only for the area on screen and only while the Map page is showing: never in the background and never in advance. Viewed tiles are cached in `~/.cache/neo-m9n/tiles`, honouring the server's caching rules, so they aren't downloaded again. **Map storage** (the disk button) shows the cache size and lets you set a limit (default 200 MB) or **Clear Map Cache**. OpenStreetMap does not allow its tiles to be used offline, so the cache is only used while online.
 
 Maps need libshumate (`sudo dnf install libshumate`). Without it the page draws the track on a grid and says how to install it.
+
+### Offline map files
+
+An offline map file holds a whole region's map, made once at home from OpenStreetMap's freely licensed *data* (not its tile servers). The app reads it locally, so the map works with no connection and nothing is sent anywhere.
+
+1. **Make a map, at home:** run `scripts/make-offline-map.sh <area>` from the checkout, for example `scripts/make-offline-map.sh isle-of-man` to try it (a minute or two), or `wales`, `scotland`, `england`, `great-britain`. `--list` explains area names; they are [Geofabrik extract](https://download.geofabrik.de/) names.
+   - **How it works:** it runs the free Planetiler converter in a Podman container (`sudo dnf install podman` if needed; Fedora Workstation includes it), pinned to a known version.
+   - **What it contacts:** before starting, it lists every host it will contact and asks you to confirm. These are the container registry and the data download sites (Geofabrik, osmdata.openstreetmap.de, Natural Earth, GitHub). They see your IP address and the area you chose.
+   - **Output:** the map goes to `Documents/NEO-M9N/maps/<area>.mbtiles`.
+   - **Size and time:** a county or small country takes minutes. Great Britain takes longer and needs several GB of free memory and around 10–20 GB of free disk while building. The finished file is much smaller, from a few MB to a few GB.
+   - **Options:** `--dry-run` shows the plan without downloading anything. `--keep-downloads` keeps the roughly 1.3 GB of supporting data for faster rebuilds.
+2. **Choose it:** on the Map page, open **Map storage** (the disk button), then **Offline map file → Choose…**. The page shows the map's name, data date, zoom range and size.
+3. **Use it:** select **Offline**. The page shows *Offline: <name>, data <date>*.
+
+**What you get:**
+- **Detail:** roads (with names), places, water, parks and buildings, in a style that follows the app's light or dark appearance.
+- **Zoom:** the file has detail up to zoom 14 and is drawn sharper as you zoom further.
+- **Outside the file's area:** the page shows the grid with your track and says *Outside offline map*.
+- **Updates:** maps don't update themselves; run the script again for newer roads.
+- **Remove:** stops using a file without deleting it.
+- **Supported files:** vector MBTiles files in the OpenMapTiles schema only; the app explains if a file isn't usable.
+- **Attribution:** offline maps show "© OpenMapTiles © OpenStreetMap contributors" as their licence requires.
 
 ## Messages
 

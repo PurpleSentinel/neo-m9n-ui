@@ -10,6 +10,7 @@
 | GTK ≥ 4.12 | `gtk4` | Yes | Toolkit |
 | libadwaita ≥ 1.5 | `libadwaita` | Yes | GNOME widgets and styling |
 | libshumate 1.x | `libshumate` | Optional | The Map page's map widget (GNOME Maps uses it); without it the track is drawn on a grid |
+| Podman | `podman` | Optional | Only for `scripts/make-offline-map.sh`, which makes offline map files; included in Fedora Workstation |
 | Native USB serial driver | Fedora kernel `cdc_acm` module | Yes for native USB | Exposes the receiver as a tty; no proprietary driver download |
 | USB inventory | `usbutils` | Optional | `lsusb` on the Host page |
 | Host utilities | `util-linux` | Optional, generally installed | tty/file inspection utilities |

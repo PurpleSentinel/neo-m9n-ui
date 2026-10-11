@@ -2,6 +2,8 @@
 
 * BlankTiles draws nothing but a plain background, locally: the default "Off" mode never
   creates an HTTP session.
+* OfflineTiles serves vector tiles from a local offline map file (m9n.mbtiles); it has no
+  network code at all.
 * OnlineTiles serves OpenStreetMap tiles only for tiles libshumate asks for (the visible
   area), only while enabled (Online and the Map page showing): cache first, conditional
   revalidation of expired tiles, then HTTPS with the app's own User-Agent. It has no
@@ -71,6 +73,39 @@ class BlankTiles(Shumate.DataSource):
 def renderer(id_, name, license_text, license_uri, data_source, max_zoom=MAX_ZOOM):
     return Shumate.RasterRenderer.new_full(id_, name, license_text, license_uri, MIN_ZOOM, max_zoom, TILE_SIZE,
                                            Shumate.MapProjection.MERCATOR, data_source)
+
+
+class OfflineTiles(Shumate.DataSource):
+    """Vector tiles read from an offline map file. There is no network path in this class."""
+
+    def __init__(self, map_file):
+        super().__init__(min_zoom_level=map_file.min_zoom, max_zoom_level=map_file.max_zoom)
+        self.map_file = map_file
+        self.requests = 0
+
+    def do_start_request(self, x, y, zoom, cancellable):
+        request = Shumate.DataSourceRequest(x=x, y=y, zoom_level=zoom)
+        self.requests += 1
+        try:
+            data = self.map_file.tile(zoom, x, y) or b""  # Empty: nothing mapped there (e.g. open sea).
+        except Exception as exc:  # A damaged file must not take the page down.
+            LOG.warning("Offline map tile %s/%s/%s unreadable: %s", zoom, x, y, exc)
+            data = b""
+        _deliver(request, data)
+        return request
+
+
+def offline_renderer(map_file, dark=False, tiles_url=None):
+    """(renderer, data source) drawing an offline map file with the bundled style."""
+    from .mapstyle import PLACEHOLDER_TILES, style
+    source = OfflineTiles(map_file)
+    renderer = Shumate.VectorRenderer.new("offline", style("dark" if dark else "light", map_file.max_zoom,
+                                                            tiles_url or PLACEHOLDER_TILES))
+    renderer.set_data_source("openmaptiles", source)
+    renderer.set_license(map_file.attribution)
+    renderer.set_min_zoom_level(0)
+    renderer.set_max_zoom_level(MAX_ZOOM)
+    return renderer, source
 
 
 class OnlineTiles(Shumate.DataSource):
