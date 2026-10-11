@@ -128,9 +128,11 @@ def validate(config):
 
 
 class SessionController:
-    def __init__(self, config, clock=time.monotonic, on_snapshot=None, on_issue=None, on_finished=None):
+    def __init__(self, config, clock=time.monotonic, on_snapshot=None, on_issue=None, on_finished=None,
+                 on_stopping=None):
         self.config = config
         self.clock = clock
+        self.on_stopping = on_stopping
         self.on_snapshot = on_snapshot
         self.on_issue = on_issue
         self.on_finished = on_finished
@@ -320,6 +322,9 @@ class SessionController:
         if self.state != "running":
             return self.result
         self.state = "stopping"
+        if self.on_stopping:
+            # Lets an event loop drop its fd watch before the descriptor is closed.
+            self.on_stopping()
         now = self.clock() if now is None else now
         if reason in (USER_STOPPED, INTERRUPTED):
             LOG.info("Stopped by user")
