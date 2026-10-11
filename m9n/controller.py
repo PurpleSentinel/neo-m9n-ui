@@ -8,7 +8,6 @@ ended the session. No GTK or terminal code belongs here.
 import logging
 import math
 import os
-import select
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -411,17 +410,3 @@ class SessionController:
         except Exception:
             pass
 
-
-def run_until_finished(controller, wait=0.1):
-    """Blocking loop for front ends without an event loop of their own."""
-    while controller.running:
-        fd = controller.fileno()
-        if fd is not None:
-            poll = select.poll()
-            poll.register(fd, select.POLLIN | select.POLLHUP | select.POLLERR)
-            if poll.poll(int(wait * 1000)):
-                controller.on_readable()
-        elif controller.config.source == "demo":
-            time.sleep(0.05)
-        controller.tick()
-    return controller.result

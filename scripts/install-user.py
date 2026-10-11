@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install CLI for the current user without pip, venv or administrative access."""
+"""Install the desktop application for the current user without pip, venv or administrative access."""
 import os
 import shutil
 from pathlib import Path
@@ -13,9 +13,9 @@ shutil.copytree(root / "m9n", data / "m9n", dirs_exist_ok=True,
                 ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
 launcher = bin_dir / "m9n"
 temp = bin_dir / ".m9n-install.tmp"
-temp.write_text("#!/usr/bin/env python3\nimport sys\nsys.path.insert(0, " + repr(str(data)) + ")\nfrom m9n.cli import main\nraise SystemExit(main())\n")
+temp.write_text("#!/usr/bin/env python3\nimport sys\nsys.path.insert(0, " + repr(str(data)) + ")\nfrom m9n.gui.application import main\nraise SystemExit(main())\n")
 temp.chmod(0o755)
 os.replace(temp, launcher)
-print(f"Installed {launcher}\nRun: {launcher} --help")
+print(f"Installed {launcher}\nRun: {launcher}")
 if str(bin_dir) not in os.environ.get("PATH", "").split(os.pathsep):
     print('Add this to ~/.bashrc: export PATH="$HOME/.local/bin:$PATH"')

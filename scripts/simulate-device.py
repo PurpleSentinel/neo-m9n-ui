@@ -15,7 +15,8 @@ p = argparse.ArgumentParser(description="Simulated receiver; does not validate p
 p.add_argument("--fault", choices=("no-fix", "rf", "corrupt", "frozen", "silent", "unplug"))
 args = p.parse_args()
 master, slave = pty.openpty()
-print(f"SYNTHETIC PTY: {os.ttyname(slave)}\nIn another terminal: m9n test --port {os.ttyname(slave)} --duration 15", flush=True)
+print(f"SYNTHETIC PTY: {os.ttyname(slave)}\nIn NEO-M9N Monitor choose Source: USB receiver, Receiver: Other path…, "
+      f"Port path: {os.ttyname(slave)}; then Start (F5) or Run Device Test (Ctrl+T). Ctrl+C here stops it.", flush=True)
 started = time.monotonic()
 next_send = started
 try:

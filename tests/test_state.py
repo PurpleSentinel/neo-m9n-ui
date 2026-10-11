@@ -2,7 +2,8 @@ import unittest
 from m9n.demo import sample
 from m9n.protocol import nmea, ubx
 from m9n.session import Session
-from m9n.display import render
+from m9n.gui.format import fix_state
+from m9n.serialize import json_line, safe
 
 
 class FakePort:
@@ -33,7 +34,7 @@ class StateTests(unittest.TestCase):
         report = session.report(10)
         self.assertEqual(report["status"], "FAIL")
         self.assertFalse(report["snapshot"]["navigation"]["fresh"])
-        self.assertIn("STALE", render(report["snapshot"]))
+        self.assertEqual(fix_state(report["snapshot"]["navigation"])[0], "stale")  # Never shown as valid.
 
     def test_frozen_epoch_despite_fresh_bytes(self):
         session = Session(0)
@@ -147,10 +148,12 @@ class StateTests(unittest.TestCase):
         count = sum(packet[2:4] == bytes((10, 56)) for packet in port.writes)
         self.assertEqual(count, 1)
 
-    def test_terminal_escape_sanitised(self):
+    def test_receiver_text_is_escaped(self):
         session = Session(0)
         session.consume(ubx(4, 2, b"\x1b[2Jbad"), 0)
-        self.assertNotIn("\x1b", render(session.snapshot(1)))
+        text = session.snapshot(1)["recent_messages"][-1]["text"]
+        self.assertEqual(safe(text), "?[2Jbad")
+        self.assertNotIn("\x1b", json_line(session.snapshot(1)))
 
 
 if __name__ == "__main__":
