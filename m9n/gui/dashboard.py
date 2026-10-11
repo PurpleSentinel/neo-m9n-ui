@@ -1,0 +1,150 @@
+"""Live dashboard: fix status, position, motion, timing, identity, stream health and issues."""
+from gi.repository import Adw, Gtk
+
+from ..serialize import json_line, safe
+from . import format as fmt
+from .pages import SessionPage, copy_button, copy_text, value_row
+
+# Fix state -> (style class, icon). The title text always accompanies the colour.
+FIX_STYLE = {"valid": ("success", "object-select-symbolic"), "stale": ("warning", "dialog-warning-symbolic"),
+             "none": ("error", "dialog-error-symbolic"), "waiting": ("dim-label", "content-loading-symbolic")}
+
+
+class DashboardPage(SessionPage):
+    def build(self):
+        page = Adw.PreferencesPage()
+
+        # Fix status: icon and text together, never colour alone.
+        self.fix_icon = Gtk.Image(pixel_size=48)
+        self.fix_title = Gtk.Label(xalign=0)
+        self.fix_title.add_css_class("title-1")
+        self.fix_detail = Gtk.Label(xalign=0, wrap=True)
+        self.fix_detail.add_css_class("dim-label")
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER)
+        text.append(self.fix_title)
+        text.append(self.fix_detail)
+        hero = Gtk.Box(spacing=18, margin_top=6, margin_bottom=6)
+        hero.append(self.fix_icon)
+        hero.append(text)
+        self.hero = hero
+        group = Adw.PreferencesGroup()
+        group.add(hero)
+        page.add(group)
+
+        self.issues_group = Adw.PreferencesGroup(title="Active Issues")
+        self.issue_rows = []
+        page.add(self.issues_group)
+
+        self.rows = {}
+
+        def group_of(title, rows, suffix=None):
+            group = Adw.PreferencesGroup(title=title)
+            if suffix:
+                group.set_header_suffix(suffix)
+            for key, label in rows:
+                self.rows[key] = value_row(label, wrap=key in ("extensions", "source", "timeouts"))
+                group.add(self.rows[key])
+            page.add(group)
+
+        group_of("Position", [("latitude", "Latitude"), ("longitude", "Longitude"),
+                              ("msl", "Altitude (mean sea level)"), ("ellipsoid", "Altitude (ellipsoid)"),
+                              ("hacc", "Horizontal accuracy"), ("vacc", "Vertical accuracy")],
+                 copy_button("Copy coordinates", self.copy_coordinates))
+        group_of("Motion", [("speed", "Speed"), ("course", "Course over ground")])
+        group_of("Dilution of Precision", [("pdop", "Position (PDOP)"), ("hdop", "Horizontal (HDOP)"),
+                                          ("vdop", "Vertical (VDOP)")])
+        group_of("Time", [("utc", "GNSS UTC"), ("tacc", "Time accuracy"), ("message", "Navigation message"),
+                          ("age", "Sample age"), ("progress", "Epoch progress age")])
+        group_of("Receiver Identity", [("software", "Firmware"), ("hardware", "Hardware"),
+                                       ("extensions", "Extensions")])
+        group_of("Session", [("source", "Source"), ("elapsed", "Elapsed"), ("updated", "Updated (host UTC)")],
+                 copy_button("Copy snapshot as JSON", self.copy_snapshot))
+        group_of("Stream", [("bytes", "Bytes received"), ("ubx", "UBX frames"), ("nmea", "NMEA frames"),
+                            ("checksum", "Checksum errors"), ("truncated", "Truncated frames"),
+                            ("oversize", "Oversized frames"), ("decode", "Undecodable payloads"),
+                            ("timeouts", "Unanswered polls"), ("rejected", "Rejected polls")])
+        return page
+
+    def show(self, snapshot):
+        nav = snapshot["navigation"] or {}
+        state, title = fmt.fix_state(snapshot["navigation"])
+        style, icon = FIX_STYLE[state]
+        for name in ("success", "warning", "error", "dim-label"):
+            self.fix_icon.remove_css_class(name)
+            self.fix_title.remove_css_class(name)
+        self.fix_icon.set_from_icon_name(icon)
+        self.fix_icon.add_css_class(style)
+        self.fix_title.add_css_class(style)
+        self.fix_title.set_label(title)
+        used = nav.get("satellites_used")
+        self.fix_detail.set_label(f"{nav.get('fix_type', fmt.UNKNOWN)} · "
+                                  f"{fmt.UNKNOWN if used is None else used} satellites used")
+        self.hero.update_property([Gtk.AccessibleProperty.LABEL], [f"{title}, {self.fix_detail.get_label()}"])
+
+        counters = snapshot["counters"]
+        identity = snapshot["identity"] or {}
+        timeouts = sum(snapshot["poll_timeouts"].values())
+        values = {
+            "latitude": fmt.coordinate(nav.get("latitude"), "N", "S"),
+            "longitude": fmt.coordinate(nav.get("longitude"), "E", "W"),
+            "msl": fmt.number(nav.get("altitude_msl_m"), 2, "m"),
+            "ellipsoid": fmt.number(nav.get("altitude_ellipsoid_m"), 2, "m"),
+            "hacc": fmt.number(nav.get("horizontal_accuracy_m"), 2, "m"),
+            "vacc": fmt.number(nav.get("vertical_accuracy_m"), 2, "m"),
+            "speed": fmt.speed(nav.get("speed_m_s")),
+            "course": fmt.number(nav.get("heading_deg"), 1, "°"),
+            "pdop": fmt.number(nav.get("pdop")), "hdop": fmt.number(nav.get("hdop")),
+            "vdop": fmt.number(nav.get("vdop")),
+            "utc": fmt.utc(nav),
+            "tacc": fmt.UNKNOWN if nav.get("time_accuracy_ns") is None else f"{nav['time_accuracy_ns']:,} ns",
+            "message": nav.get("source_message", fmt.UNKNOWN),
+            "age": fmt.seconds(nav.get("age_s")), "progress": fmt.seconds(nav.get("epoch_progress_age_s")),
+            "software": identity.get("software", fmt.UNKNOWN), "hardware": identity.get("hardware", fmt.UNKNOWN),
+            "extensions": "\n".join(identity.get("extensions", [])) or fmt.UNKNOWN,
+            "source": snapshot["source"], "elapsed": fmt.seconds(snapshot["elapsed_s"]),
+            "updated": snapshot["host_utc"],
+            "bytes": fmt.integer(counters.get("bytes", 0)), "ubx": fmt.integer(counters.get("ubx_frames", 0)),
+            "nmea": fmt.integer(counters.get("nmea_frames", 0)),
+            "checksum": fmt.integer(counters.get("checksum_errors", 0)),
+            "truncated": fmt.integer(counters.get("truncated_frames", 0)),
+            "oversize": fmt.integer(counters.get("oversize_frame", 0)),
+            "decode": fmt.integer(snapshot["decode_errors"]),
+            "timeouts": f"{timeouts:,}" + (f" ({', '.join(sorted(snapshot['poll_timeouts']))})" if timeouts else ""),
+            "rejected": ", ".join(snapshot["rejected_polls"]) or "none",
+        }
+        for key, text in values.items():
+            # Receiver strings are shown as plain text; safe() removes control characters.
+            label = self.rows[key].value
+            text = safe(text) if key != "extensions" else "\n".join(safe(line) for line in text.split("\n"))
+            if label.get_label() != text:
+                label.set_label(text)
+        for key in ("checksum", "truncated", "oversize", "decode"):
+            self.rows[key].value.remove_css_class("warning")
+        for key, counter in (("checksum", counters.get("checksum_errors")),
+                             ("truncated", counters.get("truncated_frames")),
+                             ("oversize", counters.get("oversize_frame")), ("decode", snapshot["decode_errors"])):
+            if counter:
+                self.rows[key].value.add_css_class("warning")
+        self.show_issues(snapshot["issues"])
+
+    def show_issues(self, issues):
+        wanted = issues or ["No active issues"]
+        if [row.get_title() for row in self.issue_rows] == wanted:
+            return
+        for row in self.issue_rows:
+            self.issues_group.remove(row)
+        self.issue_rows = []
+        for text in wanted:
+            row = Adw.ActionRow(title=safe(text), use_markup=False, title_lines=0)
+            icon = Gtk.Image(icon_name="dialog-warning-symbolic" if issues else "object-select-symbolic")
+            icon.add_css_class("warning" if issues else "success")
+            row.add_prefix(icon)
+            self.issues_group.add(row)
+            self.issue_rows.append(row)
+
+    def copy_coordinates(self, _button):
+        text = fmt.coordinates_text(self.snapshot and self.snapshot["navigation"])
+        copy_text(self, text, "Coordinates copied" if text else "No position to copy")
+
+    def copy_snapshot(self, _button):
+        copy_text(self, self.snapshot and json_line(self.snapshot), "Snapshot JSON copied")

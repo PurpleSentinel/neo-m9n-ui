@@ -65,6 +65,8 @@ def shoot():
 
 def start():
     win = app.props.active_window
+    # Broadway without a browser never advances the frame clock, so animations would freeze mid-way.
+    Gtk.Settings.get_default().set_property("gtk-enable-animations", False)
     if page:
         win.show_page(page)
     for action in actions:
