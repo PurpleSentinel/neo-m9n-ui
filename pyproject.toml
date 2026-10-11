@@ -20,3 +20,6 @@ m9n = "m9n.gui.application:main"
 
 [tool.setuptools]
 packages = ["m9n", "m9n.gui"]
+
+[tool.setuptools.package-data]
+"m9n.gui" = ["data/*.desktop", "data/*.xml", "data/icons/hicolor/*/apps/*.svg"]

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.PurpleSentinel.NeoM9N</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>NEO-M9N Monitor</name>
+  <summary>Diagnose and monitor a u-blox NEO-M9N GNSS receiver</summary>
+  <description>
+    <p>
+      NEO-M9N Monitor tests a SparkFun u-blox NEO-M9N receiver connected directly over USB and shows live GNSS
+      data. It gives explicit evidence for USB and serial failures, loss of fix, frozen navigation epochs,
+      checksum failures and receiver-reported RF or firmware errors.
+    </p>
+    <ul>
+      <li>Live fix, position, motion, timing and receiver identity</li>
+      <li>Sortable satellite table with signal levels and a sky plot</li>
+      <li>RF, antenna, spoofing and diagnostic freshness indicators</li>
+      <li>Timed device test with a PASS, WARN or FAIL report</li>
+      <li>Raw capture, JSONL snapshot and application log evidence files, plus replay</li>
+      <li>Host diagnostics for USB access, drivers and competing services</li>
+    </ul>
+    <p>
+      The receiver is only sent read-only diagnostic polls; its configuration is never changed, and passive
+      mode sends nothing at all.
+    </p>
+  </description>
+  <developer id="io.github.purplesentinel">
+    <name>Mark Rodman</name>
+  </developer>
+  <launchable type="desktop-id">io.github.PurpleSentinel.NeoM9N.desktop</launchable>
+  <url type="homepage">https://github.com/PurpleSentinel/neo-m9n-ui</url>
+  <url type="bugtracker">https://github.com/PurpleSentinel/neo-m9n-ui/issues</url>
+  <content_rating type="oars-1.1"/>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <provides>
+    <binary>m9n</binary>
+  </provides>
+  <releases>
+    <release version="2.0.0" date="2026-10-11">
+      <description>
+        <p>The command-line interface is replaced by this GTK 4 and libadwaita desktop application.</p>
+      </description>
+    </release>
+  </releases>
+</component>

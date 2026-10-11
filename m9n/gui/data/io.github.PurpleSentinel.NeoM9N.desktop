@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=NEO-M9N Monitor
+GenericName=GNSS Receiver Monitor
+Comment=Diagnose and monitor a SparkFun u-blox NEO-M9N GNSS receiver over USB
+Exec=m9n
+Icon=io.github.PurpleSentinel.NeoM9N
+Terminal=false
+Categories=Utility;
+Keywords=GNSS;GPS;u-blox;NEO-M9N;satellite;receiver;diagnostics;
+StartupNotify=true

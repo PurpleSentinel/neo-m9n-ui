@@ -3,12 +3,13 @@ import logging
 import signal
 import sys
 import traceback
+from pathlib import Path
 
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Adw, Gio, GLib, Gtk  # noqa: E402
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk  # noqa: E402
 
 from .. import __version__  # noqa: E402
 from .window import MainWindow  # noqa: E402
@@ -16,6 +17,7 @@ from .window import MainWindow  # noqa: E402
 LOG = logging.getLogger("m9n")
 APP_ID = "io.github.PurpleSentinel.NeoM9N"
 APP_NAME = "NEO-M9N Monitor"
+DATA = Path(__file__).resolve().parent / "data"
 SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Run a device test", "<Control>t"),
                           ("Show or hide session setup", "F9")]),
              ("General", [("Keyboard shortcuts", "<Control>question"), ("Quit", "<Control>q")])]
@@ -33,6 +35,9 @@ class Application(Adw.Application):
 
     def do_startup(self):
         Adw.Application.do_startup(self)
+        # The packaged icons work from a checkout too; an installed copy in the theme takes precedence.
+        Gtk.IconTheme.get_for_display(Gdk.Display.get_default()).add_search_path(str(DATA / "icons"))
+        Gtk.Window.set_default_icon_name(APP_ID)
         # The Messages page shows INFO and up (DEBUG while a debug session runs);
         # warnings also reach stderr for anyone who started the app from a terminal.
         LOG.setLevel(logging.INFO)
@@ -104,7 +109,7 @@ class Application(Adw.Application):
 
     def on_about(self, *_):
         about = Adw.AboutDialog(
-            application_name=APP_NAME, application_icon="computer-symbolic", version=__version__,
+            application_name=APP_NAME, application_icon=APP_ID, version=__version__,
             developer_name="Mark Rodman", license_type=Gtk.License.MIT_X11,
             website="https://github.com/PurpleSentinel/neo-m9n-ui",
             issue_url="https://github.com/PurpleSentinel/neo-m9n-ui/issues",
