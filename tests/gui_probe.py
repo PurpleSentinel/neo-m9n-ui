@@ -435,6 +435,55 @@ def host(win):
     wait_for(lambda: page.document is not None, done, timeout_ms=8000)
 
 
+def replay(win):
+    kind = os.environ["M9N_KIND"]
+    out = Path(os.environ["M9N_OUT"])
+    toasts = []
+    original = win.toast
+    win.toast = lambda text, timeout=3: toasts.append(text) or original(text, timeout)
+    if kind == "demo":
+        win.start_session(SessionConfig(source="demo", fault="corrupt"))
+    else:
+        win.start_session(SessionConfig(source="replay", capture=Path(os.environ["M9N_CAPTURE"]),
+                                        json_log=out / "replay.jsonl"))
+    result["banner"] = win.banner.get_title() if win.banner.get_revealed() else None
+    gaps, last, fractions = [], [GLib.get_monotonic_time()], []
+
+    def ticker():
+        now = GLib.get_monotonic_time()
+        gaps.append((now - last[0]) / 1000)
+        last[0] = now
+        if win.progress.get_visible():
+            fractions.append(win.progress.get_fraction())
+        if kind == "cancel" and fractions and fractions[-1] > .2 and win.runner.running:
+            win.activate_action("win.toggle-session", None)
+        return win.runner.running
+
+    def finished(_runner, outcome):
+        later(150, lambda: inspect(outcome))
+
+    def inspect(outcome):
+        dialog = win.get_visible_dialog()
+        result.update(reason=outcome.reason, toasts=toasts, max_gap_ms=max(gaps or [0]),
+                      fractions=[min(fractions or [0]), max(fractions or [0])],
+                      progress_visible_after=win.progress.get_visible(),
+                      dialog=dialog.get_heading() if dialog else None,
+                      banner_after=win.banner.get_title() if win.banner.get_revealed() else None,
+                      dashboard=win.pages["dashboard"].stack.get_visible_child_name(),
+                      checksum=outcome.snapshot["counters"].get("checksum_errors", 0))
+        log = out / "replay.jsonl"
+        result["jsonl_lines"] = len(log.read_text().splitlines()) if log.exists() else None
+        result["files_open"] = sum(1 for fd in os.listdir("/proc/self/fd")
+                                   if os.path.realpath(f"/proc/self/fd/{fd}").startswith(str(out.resolve())))
+        if dialog:
+            dialog.force_close()
+        later(100, app.quit)
+    win.runner.connect("finished", finished)
+    GLib.timeout_add(20, ticker)
+    if kind == "demo":
+        later(1300, lambda: win.runner.stop())
+
+
 def on_activate(_app):
     result["activations"] += 1
     if result["activations"] == 1:

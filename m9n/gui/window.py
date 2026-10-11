@@ -19,6 +19,7 @@ from .testpage import TestPage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
+PROGRESS_MS = 200
 PAGE_TYPES = {"dashboard": DashboardPage, "satellites": SatellitesPage, "receiver": ReceiverPage,
               "messages": MessagesPage, "test": TestPage, "host": HostPage}
 
@@ -76,6 +77,12 @@ class MainWindow(Adw.ApplicationWindow):
         toolbar = Adw.ToolbarView(content=self.split)
         toolbar.add_top_bar(header)
         toolbar.add_top_bar(self.banner)
+        # Replay and timed sessions show progress under the header bar.
+        self.progress = Gtk.ProgressBar(visible=False)
+        self.progress.add_css_class("osd")
+        self.progress.update_property([Gtk.AccessibleProperty.LABEL], ["Session progress"])
+        toolbar.add_top_bar(self.progress)
+        self._progress_source = 0
         toolbar.add_bottom_bar(switcher_bar)
         self.set_content(toolbar)
 
@@ -207,6 +214,8 @@ class MainWindow(Adw.ApplicationWindow):
         source = runner.config.source
         self.set_banner({"demo": "SYNTHETIC DEMO: generated data, not from a receiver",
                          "replay": "REPLAY: recorded data without original timing"}.get(source))
+        self.update_progress()
+        self._progress_source = GLib.timeout_add(PROGRESS_MS, self.update_progress)
         # Suspend would silently cut the USB session and corrupt a timed test.
         self._inhibit_cookie = self.get_application().inhibit(
             self, Gtk.ApplicationInhibitFlags.SUSPEND | Gtk.ApplicationInhibitFlags.LOGOUT,
@@ -233,13 +242,39 @@ class MainWindow(Adw.ApplicationWindow):
             self.set_banner(f"Device disconnected: {safe(result.transport_error)}. Reconnect it and start a new session.")
         elif runner.config.source == "device":
             self.set_banner(None)
-        self.toast({COMPLETED: "Session completed", USER_STOPPED: "Session stopped",
-                    INTERRUPTED: "Session interrupted", TRANSPORT_ERROR: "Session ended: receiver disconnected",
-                    OUTPUT_ERROR: "Session stopped: an evidence file could not be written"}[result.reason])
+        if self._progress_source:
+            GLib.source_remove(self._progress_source)
+            self._progress_source = 0
+        self.progress.set_visible(False)
+        if runner.config.source == "replay" and result.reason == COMPLETED:
+            self.replay_outcome(result)
+        else:
+            self.toast({COMPLETED: "Session completed", USER_STOPPED: "Session stopped",
+                        INTERRUPTED: "Session interrupted", TRANSPORT_ERROR: "Session ended: receiver disconnected",
+                        OUTPUT_ERROR: "Session stopped: an evidence file could not be written"}[result.reason])
         if result.output_errors:
             self.alert("Evidence Files Incomplete", "\n".join(result.output_errors))
         if self._close_after_stop:
             self.close()
+
+    def update_progress(self):
+        fraction = self.runner.progress() if self.runner.running else None
+        self.progress.set_visible(fraction is not None)
+        if fraction is not None:
+            self.progress.set_fraction(fraction)
+        return GLib.SOURCE_CONTINUE
+
+    def replay_outcome(self, result):
+        """The CLI's replay failure cases (exit 1) as explicit messages."""
+        if not result.received_bytes:
+            self.set_banner("REPLAY: the capture file is empty")
+            self.alert("Capture Is Empty", "The replay file contains no bytes, so there is nothing to decode.")
+        elif result.snapshot["navigation"] is None:
+            self.set_banner("REPLAY: no navigation messages were found in this capture")
+            self.alert("No Navigation Found", f"{result.valid_frames:,} valid frames were decoded, but none carried "
+                       "a position (NAV-PVT, GGA or RMC). Check the protocol counters on the Dashboard.")
+        else:
+            self.toast(f"Replay complete: {result.valid_frames:,} valid frames decoded")
 
     def on_close_request(self, _window):
         if not self.runner.running:
