@@ -128,17 +128,3 @@ Demo output is labelled `SYNTHETIC DEMO`. The simulator prints a `/dev/pts/...` 
 ```bash
 python3 -m unittest discover -s tests -v
 ```
-
-## Publish on your GitHub account
-
-This archive contains a clean source tree, not a remotely created GitHub repository. From the extracted directory:
-
-```bash
-git init -b main
-git add .
-git commit -m "Add Fedora NEO-M9N USB diagnostics CLI"
-git remote add origin https://github.com/YOUR_USERNAME/neo-m9n-cli.git
-git push -u origin main
-```
-
-Create an empty GitHub repository first. GitHub Actions includes Linux protocol/PTY tests and a Fedora container job; those remote jobs run after you push. MIT licensed. Vendor specifications are linked in [REFERENCES.md](docs/REFERENCES.md).
