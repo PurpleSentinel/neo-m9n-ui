@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fedora:
+    name: Fedora (core + GUI)
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    timeout-minutes: 20
+    steps:
+      - name: Install the desktop runtime and test tools
+        run: >
+          dnf install -y --setopt=install_weak_deps=False
+          git python3 python3-gobject gtk4 libadwaita dbus-daemon dejavu-sans-fonts
+          appstream desktop-file-utils psmisc usbutils util-linux
+      - uses: actions/checkout@v4
+      - name: Create an unprivileged test user
+        # Root ignores file permissions and tty exclusivity, which several tests exercise.
+        run: useradd --create-home tester && chown -R tester "$GITHUB_WORKSPACE"
+      - name: Run all tests (GUI tests use a private Broadway display and D-Bus session)
+        run: runuser -u tester -- python3 -m unittest discover -s tests -v
+      - name: Validate desktop metadata
+        run: |
+          desktop-file-validate m9n/gui/data/io.github.PurpleSentinel.NeoM9N.desktop
+          appstreamcli validate --no-net m9n/gui/data/io.github.PurpleSentinel.NeoM9N.metainfo.xml
+
+  core:
+    name: Core on Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Run tests without the GTK runtime (GUI tests skip themselves)
+        run: python -m unittest discover -s tests -v
