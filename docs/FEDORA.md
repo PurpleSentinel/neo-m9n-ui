@@ -4,74 +4,78 @@
 
 | Component | Fedora package | Required? | Purpose |
 | --- | --- | --- | --- |
-| Python 3.10 or newer | `python3` | Yes | Entire CLI runtime and test suite |
+| Python 3.10 or newer | `python3` | Yes | Application runtime and test suite |
+| PyGObject ≥ 3.46 | `python3-gobject` | Yes | GTK/GLib bindings |
+| GObject typelibs | `gobject-introspection` | Yes | Includes the `cairo` typelib the bindings need; `python3-gobject` does not pull it in by itself |
+| GTK ≥ 4.12 | `gtk4` | Yes | Toolkit |
+| libadwaita ≥ 1.5 | `libadwaita` | Yes | GNOME widgets and styling |
 | Native USB serial driver | Fedora kernel `cdc_acm` module | Yes for native USB | Exposes the receiver as a tty; no proprietary driver download |
-| USB inventory | `usbutils` | Optional | `lsusb` in `doctor` |
+| USB inventory | `usbutils` | Optional | `lsusb` on the Host page |
 | Host utilities | `util-linux` | Optional, generally installed | tty/file inspection utilities |
-| Port-owner inspection | `psmisc` | Optional | `fuser` in `doctor` |
-| udev/systemd commands | Fedora system installation | Optional diagnostics/access rule | `udevadm`, `systemctl`, `journalctl` |
-| Git | `git` | Optional | Publish/version source |
-| ZIP extraction | `unzip` | Optional | Extract the delivered archive |
+| Port-owner inspection | `psmisc` | Optional | `fuser` on the Host page |
+| udev/systemd commands | Fedora system installation | Optional diagnostics and access rule | `udevadm`, `systemctl`, `journalctl` |
+| Git | `git` | Optional | Clone and update the source |
 | pip/build tooling | `python3-pip`, `python3-setuptools` | Optional | Conventional Python package installation |
 
-The runtime uses `termios`, `tty`, `select`, `fcntl`, `argparse`, `struct`, `json`, logging and other Python standard-library modules. No pyserial/rich/pynmea2 dependencies are needed. No development compiler is needed. These package names are not version pins; Fedora resolves updates for your installed release.
+Serial I/O uses the standard library (`termios`, `tty`, `select`, `fcntl`), so there are no pyserial or other pip dependencies and no compiler is needed. Fedora 40 or newer provides the required GTK, libadwaita and PyGObject versions; the app checks them at startup and prints the `dnf` command if anything is missing. These package names are not version pins; Fedora resolves updates for your installed release.
 
 ## Workstation/Server installation
 
 ```bash
-sudo dnf install python3 usbutils util-linux psmisc
+sudo dnf install python3 python3-gobject gobject-introspection gtk4 libadwaita usbutils util-linux psmisc
 python3 scripts/install-user.py
-~/.local/bin/m9n --version
 ```
 
-The user installer copies the package to `~/.local/share/neo-m9n-cli/m9n` and writes `~/.local/bin/m9n`. Re-running it upgrades this copy. It does not alter shell files or USB permissions. Installed code runs from the copied package; editing the original checkout requires reinstalling or running `python3 -m m9n` there.
+(`bash scripts/install-fedora.sh` runs both steps.) The user installer:
+- copies the package to `~/.local/share/neo-m9n` and writes the launcher `~/.local/bin/m9n`
+- installs the desktop entry, AppStream metadata and icons under `~/.local/share`, so **NEO-M9N Monitor** appears in Activities
 
-For bash, if required:
+Re-running it upgrades the copy and removes files that no longer exist upstream, as well as a 1.x `~/.local/share/neo-m9n-cli` install. It does not alter shell files or USB permissions. The installed code runs from the copy; to run your checkout directly, use `python3 -m m9n` there.
+
+The desktop entry starts the launcher by its full path. To run `m9n` from a terminal, bash may need:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Add that line to `~/.bashrc` for future shells. To uninstall:
+To uninstall:
 
 ```bash
-rm ~/.local/bin/m9n
-rm -r ~/.local/share/neo-m9n-cli
+python3 scripts/install-user.py --uninstall
 ```
 
-Delete only those application-owned paths. If you installed the optional udev rule, remove `/etc/udev/rules.d/70-ublox-gnss.rules`, reload rules and replug separately.
+This removes the package, launcher, desktop entry, metadata and icons. Your settings (`~/.config/neo-m9n`) and evidence files are left in place. If you installed the optional udev rule, remove `/etc/udev/rules.d/70-ublox-gnss.rules`, reload the rules and replug separately.
 
 ## Optional pip installation
 
-The direct user installer is the simplest route and works without network access once Python is present. For standard Python packaging:
+The user installer is the simplest route and works offline once the packages above are present. For standard Python packaging, the virtual environment must see the system PyGObject:
 
 ```bash
 sudo dnf install python3-pip
-python3 -m venv .venv
+python3 -m venv --system-site-packages .venv
 .venv/bin/python -m pip install .
-.venv/bin/m9n --help
+.venv/bin/m9n
 ```
 
-pip obtains the `setuptools>=61` build dependency if necessary; it is not a runtime dependency. Avoid installing into Fedora's system Python with `sudo pip`. An offline build can use a pre-provisioned environment with setuptools and `pip install --no-build-isolation .`, or skip packaging entirely and use the source/user installer.
+pip obtains the `setuptools>=77` build dependency if necessary; it is not a runtime dependency. A pip install provides the `m9n` command but no desktop entry; use the user installer for that. Avoid installing into Fedora's system Python with `sudo pip`.
 
 ## USB permissions: local desktop
 
-First inspect the actual port:
+The Host page shows the selected port, whether you have read/write access and the device's udev properties. From a terminal:
 
 ```bash
-m9n list
 ls -l /dev/ttyACM0
 udevadm info --query=property --name=/dev/ttyACM0
 ```
 
-Install the supplied udev rule to give the active local seat user access and tell ModemManager to ignore this u-blox tty:
+Install the supplied udev rule to give the active local seat user access, and to tell ModemManager to ignore this u-blox tty. The Host page offers the same commands to copy when access is denied:
 
 ```bash
 sudo install -m 0644 udev/70-ublox-gnss.rules /etc/udev/rules.d/70-ublox-gnss.rules
 sudo udevadm control --reload-rules
 ```
 
-Unplug and reconnect, then run `m9n doctor`. The rule intentionally runs before the standard seat/uaccess processing and applies to all u-blox VID `1546` tty devices. Narrow it with a verified `ATTRS{idProduct}` or USB serial number if you have other u-blox hardware. It is not world-writable.
+Unplug and reconnect, then press Refresh on the Host page. The rule deliberately runs before the standard seat/uaccess processing and applies to all u-blox VID `1546` tty devices. If you have other u-blox hardware, narrow it with a verified `ATTRS{idProduct}` or USB serial number. It is not world-writable.
 
 ## USB permissions: SSH/headless
 
@@ -88,7 +92,7 @@ If the device is group-writable and owned by `dialout`, for example:
 sudo usermod -aG dialout "$USER"
 ```
 
-Use the group actually shown on your machine and log out/in. Group membership affects every device owned by that group. For a dedicated service account, use a narrowly scoped per-device udev group rule instead. Do not use permanent `chmod 666` or run the whole CLI as root to bypass this.
+Use the group actually shown on your machine, then log out and back in. Group membership affects every device owned by that group. For a dedicated service account, use a narrowly scoped per-device udev group rule instead. Do not use a permanent `chmod 666`, and do not run the application as root to get around this.
 
 ## Device detection and competing services
 
@@ -96,10 +100,9 @@ Use the group actually shown on your machine and log out/in. Group membership af
 lsusb
 journalctl -k -b --no-pager
 sudo modprobe cdc_acm
-m9n doctor --port /dev/ttyACM0
 ```
 
-`doctor` reads USB inventory, kernel-module visibility, tty accessibility, udev properties, port owners and gpsd/ModemManager service state. It never loads modules, stops services or changes permissions itself. An active service is a clue, not proof that it owns the GNSS port. `fuser` may need administrator access to show other users' processes.
+The Host page reads the USB inventory, kernel-module visibility, tty access, udev properties, port owners and the gpsd/ModemManager service state. It never loads modules, stops services or changes permissions itself. An active service is a clue, not proof that it owns the GNSS port. ModemManager is harmless when udev marks the receiver `ID_MM_DEVICE_IGNORE=1`, which the supplied rule and ModemManager's own rules both do. `fuser` may need administrator access to show other users' processes.
 
 If gpsd really owns this receiver and it is safe to stop it for the test:
 
@@ -107,17 +110,10 @@ If gpsd really owns this receiver and it is safe to stop it for the test:
 sudo systemctl stop gpsd.service gpsd.socket
 ```
 
-Stopping the socket matters because it can reactivate the service. Restore the services to their previous desired state afterwards. Prefer the supplied per-device ModemManager ignore rule to disabling modem services system-wide.
+Stopping the socket matters because it can reactivate the service. Afterwards, restore the services to the state you want. Prefer the per-device ModemManager ignore rule to disabling modem services system-wide.
 
-The app takes an advisory lock and `TIOCEXCL` on the tty. This blocks later opens; it cannot evict a process that already had the tty open. Check ownership before running a test if data is intermittent.
+The app takes an advisory lock and `TIOCEXCL` on the tty. This blocks later opens by unprivileged processes; it cannot evict a process that already had the tty open. If data is intermittent, check ownership on the Host page before running a test.
 
 ## Fedora Atomic desktops
 
-On Silverblue/Kinoite or other Atomic variants, run this dependency-free CLI using the host's Python if available:
-
-```bash
-python3 --version
-python3 -m m9n list
-```
-
-Use the appropriate host package mechanism if Python/optional utilities are absent. The `dnf` helper targets Workstation/Server, not immutable hosts. A toolbox container must have the receiver tty and permissions available inside it; testing host USB directly avoids an extra device-access boundary. udev rules and kernel modules belong on the host.
+On Silverblue, Kinoite and other Atomic variants, layer the runtime with `rpm-ostree install python3-gobject gobject-introspection gtk4 libadwaita` (or use a toolbox that has them), then run `python3 -m m9n` from the checkout or use the user installer. The `dnf` helper targets Workstation/Server, not immutable hosts. A toolbox container must have the receiver tty and permissions available inside it; using the host directly avoids an extra device-access boundary. udev rules and kernel modules belong on the host. A Flatpak is tracked in issue #31.

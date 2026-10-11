@@ -1,130 +1,94 @@
-# SparkFun NEO-M9N USB CLI for Linux
+# NEO-M9N Monitor
 
-`m9n` tests a SparkFun u-blox NEO-M9N connected directly over USB and displays live GNSS data in your terminal. It provides explicit evidence for USB/serial failures, unavailable diagnostics, loss of fix, frozen navigation epochs, checksum failures and receiver-reported RF or firmware errors.
+A GNOME desktop application (GTK 4 + libadwaita) that tests a SparkFun u-blox NEO-M9N connected directly over USB and shows live GNSS data. It gives explicit evidence for USB/serial failures, unavailable diagnostics, loss of fix, frozen navigation epochs, checksum failures and receiver-reported RF or firmware errors.
 
-**Python 3.10+ and Linux only. No third-party runtime packages, cloud services, Arduino, gpsd or u-center are required.** The source targets Fedora Workstation/Server and runs directly from an extracted checkout. It uses the kernel USB tty device, normally `/dev/ttyACM0`.
+![Session setup and live dashboard](docs/screenshots/setup-dashboard.png)
 
-The default mode sends only empty-payload UBX diagnostic polls. It does not change GNSS configuration, reset the receiver or write flash. `--passive` disables all transmissions. Diagnostic availability depends on firmware, USB protocol configuration and antenna supervisor wiring.
+**Linux only, Python 3.10+, GTK ≥ 4.12, libadwaita ≥ 1.5.** There are no pip runtime packages, cloud services, Arduino, gpsd or u-center. The app targets Fedora Workstation/Server (40 or newer) and runs straight from a checkout. It uses the kernel USB tty, normally `/dev/ttyACM0`.
+
+The receiver is only sent empty-payload UBX diagnostic polls. The app never changes GNSS configuration, resets the receiver or writes flash, and **Passive** mode sends nothing at all. Which diagnostics are available depends on firmware, USB protocol configuration and antenna supervisor wiring.
+
+> Version 2.0 replaced the earlier command-line tool with this application. See [CHANGELOG.md](CHANGELOG.md), including what replaces scripted use.
 
 ## Quick start on Fedora
 
-Extract this repository and enter its directory:
-
 ```bash
-unzip neo-m9n-cli.zip
-cd neo-m9n-cli
-sudo dnf install python3
+git clone https://github.com/PurpleSentinel/neo-m9n-ui.git
+cd neo-m9n-ui
+sudo dnf install python3 python3-gobject gobject-introspection gtk4 libadwaita
 python3 scripts/install-user.py
 ```
 
-If `m9n` is not found, use `~/.local/bin/m9n` or add `~/.local/bin` to your shell's PATH. You can also run every command without installing by replacing `m9n` with `python3 -m m9n` from this directory.
+Open **NEO-M9N Monitor** from Activities, or run `~/.local/bin/m9n`. Without installing, run `python3 -m m9n` from the checkout. Remove it again with `python3 scripts/install-user.py --uninstall`. `bash scripts/install-fedora.sh` installs the packages above plus the optional host tools (`usbutils util-linux psmisc`) and then the app. See [Fedora installation and USB access](docs/FEDORA.md) for permissions, Atomic desktops and pip.
 
-Optional host troubleshooting tools:
+Connect the GNSS board's USB port using a **USB data cable**, attach the right antenna and give it an open view of the sky. A USB-C plug does not guarantee the cable carries data. SparkFun's MicroMod Function Board variant also needs its Main Board powered separately; see [hardware notes](docs/HARDWARE.md).
 
-```bash
-sudo dnf install usbutils util-linux psmisc
-```
+1. Open the **Host** page. It should list the u-blox receiver and report read/write access.
+2. In the session setup sidebar (F9), keep **Source: USB receiver** and **Receiver: Automatic**, then press **Start** (F5) to watch live data.
+3. Press **Run Device Test** (Ctrl+T) for a timed PASS/WARN/FAIL assessment, outdoors for best results.
 
-The combined helper `bash scripts/install-fedora.sh` installs these Fedora packages and the CLI. See [Fedora installation and USB access](docs/FEDORA.md) for permissions, Atomic desktops and an optional pip install.
-
-Connect the GNSS board's USB port using a **USB data cable**, attach the appropriate antenna and give it an open view of the sky. A USB-C plug does not guarantee the cable carries data. SparkFun's MicroMod Function Board variant also needs the Main Board powered separately; see [hardware notes](docs/HARDWARE.md).
+If access is denied, the Host page shows the commands to run. They install the supplied udev rule, which grants the active local desktop user access to u-blox ttys:
 
 ```bash
-m9n list
-m9n doctor
-m9n test --duration 60
-m9n watch
-```
-
-If access is denied, install the supplied rule, then unplug/replug the receiver:
-
-```bash
-sudo install -m 0644 udev/70-ublox-gnss.rules /etc/udev/rules.d/70-ublox-gnss.rules
+echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"' | sudo tee /etc/udev/rules.d/70-ublox-gnss.rules
 sudo udevadm control --reload-rules
 ```
 
-That rule grants access to the active local desktop user for u-blox tty devices. For SSH/headless sessions, follow the owning-group instructions in [FEDORA.md](docs/FEDORA.md).
+Unplug and reconnect afterwards. The app never runs privileged commands itself. For SSH/headless use, see the owning-group instructions in [FEDORA.md](docs/FEDORA.md).
 
-Choose explicitly when auto-selection cannot identify one u-blox device:
-
-```bash
-m9n test --port /dev/ttyACM0 --duration 120
-m9n watch --port /dev/serial/by-id/YOUR_DEVICE
-```
-
-Auto-selection matches u-blox USB vendor ID `1546` and refuses ambiguous devices. A matching USB VID alone is not model authentication; `test` checks the receiver's `MON-VER` model when it is supplied.
+Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess between several receivers; pick one explicitly instead (stable `/dev/serial/by-id/` names are offered). A matching vendor ID is not model authentication: the device test checks the receiver's own `MON-VER` model.
 
 ## What you get
 
-| Capability | Detail |
+| Page | Detail |
 | --- | --- |
-| Live terminal display | Position, UTC, fix validity, satellites used, altitude, speed, course, horizontal accuracy, firmware and stream counters |
-| Satellite table | GNSS constellation, SV identifier, C/N0, elevation, azimuth and use in solution, when NAV-SAT is available |
-| Receiver diagnostics | MON-VER identity, MON-RF antenna/interference information, NAV-STATUS TTFF/uptime/spoof detector and any received INF/TXT notices |
-| Fault detection | Unplug/I/O errors, silence, missing polls, malformed frames, receiver error messages, stale or frozen epochs and invalid fixes |
-| JSON and evidence | JSON stdout, JSONL snapshot logs, exact raw RX captures, verbose RX/TX hex logs and structured test reports |
-| Offline development | Synthetic demo modes, raw capture replay, PTY receiver simulator and automated protocol/CLI tests |
+| Dashboard | Fix status, position, altitude, accuracy, speed, course, DOP, GNSS UTC, sample and epoch-progress age, firmware identity, stream counters and active issues; copy coordinates or the snapshot as JSON |
+| Satellites | Every NAV-SAT satellite: constellation, SV, C/N0, elevation, azimuth, use in solution, signal quality, health; sortable; sky plot |
+| Receiver | MON-RF antenna/jamming/noise/AGC, NAV-STATUS TTFF/uptime/spoofing indication, diagnostic freshness, unanswered and rejected polls |
+| Messages | Receiver INF/TXT notices and parser errors for the whole session, and the application log (debug: RX/TX hex); filter, search, copy, save |
+| Test | Timed device test with progress and a PASS/WARN/FAIL/INTERRUPTED report you can save and copy |
+| Host | USB devices, access, `cdc_acm`, port owners, gpsd/ModemManager, udev properties; replaces `doctor`; save as JSON |
 
-Native USB does not require a UART baud-rate hunt. `--baud` sets the tty line coding, primarily useful if you deliberately use a USB-to-UART adapter with `--port`. It does not configure the receiver's UART or its navigation update rate.
+Evidence files (all optional, set in the sidebar): an exact **raw RX capture**, a **JSONL snapshot log** (snapshots plus the final test report), the **application log** and the **test report**. By default they get timestamped names in `Documents/NEO-M9N`; any of them can be pinned to a specific file. Raw captures are never overwritten. **Captures and logs contain your precise location and receiver identifiers**: inspect them before sharing; `captures/`, `reports/`, `*.ubx` and `*.jsonl` are gitignored.
 
-## Live data and debug capture
+![Satellites page with sky plot](docs/screenshots/satellites.png)
 
-```bash
-# Terminal display, refreshed every second; Ctrl-C exits.
-m9n watch --port /dev/ttyACM0
-
-# JSON snapshots for scripts (errors/logs remain on stderr).
-m9n watch --json --duration 30
-
-# Create parent directories yourself; each output must have a separate path.
-mkdir -p captures reports
-m9n watch --duration 120 --debug \
-  --raw-log captures/receiver.ubx \
-  --json-log captures/live.jsonl \
-  --log-file captures/debug.log
-
-# Final stdout is exactly one JSON object with --json on test.
-m9n test --duration 120 --json --report reports/test.json
-
-# Listen without sending any polls.
-m9n watch --passive --json
-
-# Decode a saved raw byte stream, including mixed NMEA and UBX.
-m9n replay captures/receiver.ubx --json
-```
-
-Raw files are created exclusively and never silently overwritten. JSONL and application logs append; report files replace their previous contents. Received bytes are flushed as they arrive, not buffered until the session ends. Captures contain location data and receiver identifiers. Inspect them before committing or sharing; default capture/report directories are gitignored.
-
-The live view processes all incoming frames immediately. Display/JSON snapshots default to 1 Hz, while polled NAV-PVT is requested at 1 Hz. Existing faster receiver output is still consumed. This is a live diagnostic tool, not a hard real-time control loop. Lowering `--interval` increases display refresh, not the receiver's measurement rate.
+The live views process every incoming frame immediately. Snapshots default to 1 Hz (the **Refresh interval** setting), and NAV-PVT is polled at 1 Hz; faster receiver output is still consumed. A lower refresh interval refreshes the display more often but does not change the receiver's measurement rate. This is a diagnostic tool, not a hard real-time control loop. **Baud rate** only matters for a USB-to-UART adapter; native USB needs no baud search.
 
 ## Device test results
 
-`m9n test` observes the device for 60 seconds by default and assesses the latest navigation plus integrity/error evidence accumulated over the session. Extend this outdoors for a cold start or difficult reception.
+The device test observes the receiver for 60 seconds by default and assesses the latest navigation plus the integrity and error evidence accumulated during the session. Extend it outdoors for a cold start or difficult reception.
 
-| Exit | Result | Meaning |
-| --- | --- | --- |
-| `0` | PASS | Valid recent communication and advancing position fix, confirmed NEO-M9N model, diagnostic responses and no observed integrity/error warnings |
-| `2` | WARN | Communication/navigation works but fix, identity or diagnostic evidence is incomplete, or RF/integrity warnings were observed |
-| `1` | FAIL / command error | No usable navigation/communication, stale/frozen navigation, unexpected reported model, receiver error, disconnect or local I/O/setup failure |
-| `130` | INTERRUPTED | The user stopped a running session with Ctrl-C |
+| Result | Meaning |
+| --- | --- |
+| PASS | Valid recent communication and an advancing position fix, a confirmed NEO-M9N model, diagnostic responses and no observed integrity or error warnings |
+| WARN | Communication and navigation work, but fix, identity or diagnostic evidence is incomplete, or RF or integrity warnings were observed |
+| FAIL | No usable navigation or communication, stale or frozen navigation, an unexpected model, a receiver error, a disconnect or a local I/O failure |
+| INTERRUPTED | The test was cancelled (or the app was closed or signalled) before its duration elapsed |
 
-Argparse also uses exit `2` for invalid command syntax; inspect stderr to distinguish it from a test WARN. A setup/open failure prints an actionable error and may occur before a report can be created. A disconnect during an opened test produces a FAIL report with a `usb_transport` check.
+![Device test result](docs/screenshots/test.png)
 
-**No fix is not proof of broken hardware.** Indoor reception, antenna placement, initial acquisition and receiver configuration can all prevent a fix. RF detector values are indications, not certification of interference/spoofing or proof of an antenna fault. An unavailable message is reported as unknown rather than healthy.
+A disconnect during a test produces a FAIL report with a `usb_transport` check. Receivers whose jamming monitor reports state 0 ("unknown or disabled") get **WARN** for RF health rather than PASS; the Receiver page explains this when it applies.
 
-See [troubleshooting](docs/TROUBLESHOOTING.md), [CLI reference](docs/CLI.md), [architecture](ARCHITECTURE.md), [protocol and data contract](docs/PROTOCOL.md), and [validation](docs/VALIDATION.md).
+**No fix is not proof of broken hardware.** Indoor reception, antenna placement, initial acquisition and receiver configuration can all prevent a fix. RF detector values are indications, not certification of interference or spoofing, and not proof of an antenna fault. An unavailable message is reported as unknown rather than healthy.
+
+## Clean exit
+
+Stop, closing the window, Ctrl+Q, SIGINT/SIGTERM/SIGHUP, an unexpected error or an unplugged receiver all end the session the same way:
+1. Release the tty: restore its settings, drop the exclusive lock and close it.
+2. Finish the report.
+3. Flush and close every evidence file.
+
+Closing the window while a session runs asks first. Suspend is inhibited while a session runs.
 
 ## Try without hardware
 
+Choose **Source: Synthetic demo** (optionally with a simulated fault: no fix, RF alarm, corrupt frames, frozen epochs, silent) or **Replay capture** with a saved raw file. Demo data is labelled SYNTHETIC DEMO and replays are labelled REPLAY. To exercise the real tty code path:
+
 ```bash
-m9n demo --duration 10
-m9n demo --fault rf --json --duration 5
-m9n demo --fault frozen --duration 10
 python3 scripts/simulate-device.py --fault no-fix
 ```
 
-Demo output is labelled `SYNTHETIC DEMO`. The simulator prints a `/dev/pts/...` port that a second terminal can pass to `m9n test`. A test against that port tests the software path, not your real GNSS module.
+It prints a `/dev/pts/…` path to enter under **Receiver: Other path…**. That tests the software path, not your GNSS module.
 
-```bash
-python3 -m unittest discover -s tests -v
-```
+More: [user guide](docs/USER-GUIDE.md), [troubleshooting](docs/TROUBLESHOOTING.md), [architecture](ARCHITECTURE.md), [protocol and data contract](docs/PROTOCOL.md), [validation](docs/VALIDATION.md), [contributing](CONTRIBUTING.md).
