@@ -48,6 +48,7 @@ class SessionSettings:
     map_mode: str = "off"  # Map page: "off" (grid, no network) or "online" (OpenStreetMap, after consent).
     map_consented: bool = False  # The user accepted the online map privacy notice.
     map_cache_mb: int = 200  # Online tile cache limit.
+    map_offline_file: str = ""  # Offline map file (MBTiles) for the "offline" map mode.
 
     @property
     def effective_mode(self):
@@ -150,7 +151,9 @@ class SessionSettings:
             settings.mode = cls.mode
         if settings.units not in ("metric", "imperial"):
             settings.units = cls.units
-        if settings.map_mode not in ("off", "online") or (settings.map_mode != "off" and not settings.map_consented):
+        if (settings.map_mode not in ("off", "online", "offline")
+                or (settings.map_mode == "online" and not settings.map_consented)
+                or (settings.map_mode == "offline" and not settings.map_offline_file)):
             settings.map_mode = cls.map_mode  # Never online without recorded consent.
         settings.map_cache_mb = min(5000, max(20, settings.map_cache_mb))
         return settings

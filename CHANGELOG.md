@@ -10,6 +10,10 @@
   - **Tile requests:** only for the visible area, only while the page is showing, never prefetched.
   - **Cache:** viewed tiles are cached in `~/.cache/neo-m9n/tiles` (size limit, **Clear Map Cache**), following OpenStreetMap's tile usage policy: its caching rules and an app User-Agent. The cache is never used offline.
   - **Without libshumate:** the track is drawn on a grid.
+- **Offline maps** (#46): a real map in a vehicle with no internet and no tile server.
+  - `scripts/make-offline-map.sh <area>` makes an OpenMapTiles vector MBTiles file at home from OpenStreetMap data, using a pinned Planetiler in Podman. It lists every host it contacts first and has `--dry-run`.
+  - The Map page's **Offline** mode draws it with a bundled light and dark style, over-zoomed beyond the file's detail. It shows the data date and attribution, and falls back to the grid outside the file's area.
+  - It makes zero network requests, proven by tests.
 - **Reset Trip** also clears the map track. The screen is kept awake on the Map page too.
 
 ### Changed

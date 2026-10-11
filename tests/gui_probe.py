@@ -704,6 +704,58 @@ def map_restore(win):
     later(800, lambda: (result.__setitem__("saved_later", win.setup.settings.map_mode), app.quit()))
 
 
+def map_offline(win):
+    """Offline map file: no network, draws from the file, outside coverage, dark style, bad files, removal."""
+    import tempfile
+    import mapfile
+    from m9n.gui import mappage
+    page = win.pages["map"]
+    folder = tempfile.mkdtemp()
+    good = mapfile.write(os.path.join(folder, "test.mbtiles"))
+    raster = mapfile.write(os.path.join(folder, "raster.mbtiles"), fmt="png")
+    url, requests = fake_tile_server()
+    mappage.STYLE_TILES_URL = url.replace(".png", ".pbf")  # Any fetch of the style's URL would show up here.
+    sessions = mappage.tiles.SESSIONS_CREATED
+    result["offline_sensitive_before"] = page.mode_buttons["offline"].get_sensitive()
+    result["bad_file"] = page.set_map_file(raster, quiet=True)
+    result["bad_label"] = page.map_file_label.get_label()
+    result["good_file"] = page.set_map_file(good)
+    result["offline_sensitive"] = page.mode_buttons["offline"].get_sensitive()
+    page.mode_buttons["offline"].set_active(True)
+    result["mode"] = page.mode
+    result["source"] = page.simple_map.get_map_source().get_id()
+    result["indicator"] = page.indicator_label.get_label()
+    result["license"] = page.simple_map.get_map_source().get_license()
+    win.show_page("map")
+    win.start_session(SessionConfig(source="demo", fault="drive"))
+
+    def live():
+        result["tiles_served"] = page.offline.requests
+        result["style_url_requests"] = len(requests)
+        result["sessions"] = len(sessions)
+        result["inside"] = not page.outside_offline_map(mappage.ShumateProjection(page.simple_map),
+                                                         page.simple_map.get_width(), page.simple_map.get_height())
+        result["saved"] = [win.setup.settings.map_mode, win.setup.settings.map_offline_file]
+        page.simple_map.get_viewport().set_location(51.5, -0.12)  # London: not in the file.
+        result["outside"] = page.outside_offline_map(mappage.ShumateProjection(page.simple_map),
+                                                     page.simple_map.get_width(), page.simple_map.get_height())
+        before = page.offline
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
+        result["dark_rebuilt"] = page.offline is not before and page.mode == "offline"
+        page.follow()
+        later(800, removed)
+
+    def removed():
+        result["style_url_requests_after"] = len(requests)
+        page.set_map_file(None)
+        result["after_remove"] = [page.mode, page.mode_buttons["offline"].get_sensitive(),
+                                  win.setup.settings.map_offline_file]
+        win.runner.stop()
+        later(100, app.quit)
+
+    later(2500, live)
+
+
 def layout(win):
     """Columns per page after a short demo device test, at M9N_PROBE_WIDTH with or without the sidebar."""
     win.split.set_show_sidebar(os.environ.get("M9N_SIDEBAR") == "1")
