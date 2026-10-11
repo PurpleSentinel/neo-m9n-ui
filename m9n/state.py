@@ -3,6 +3,29 @@ from collections import Counter, deque
 from datetime import datetime, timezone
 
 
+RF_FRESH_S = 15  # MON-RF is polled every 5 s.
+JAMMING = {0: "unknown or monitor disabled", 1: "no interference", 2: "interference warning", 3: "critical interference"}
+SPOOFING = {0: "unknown or detector disabled", 1: "no spoofing indicated", 2: "spoofing indicated",
+            3: "multiple spoofing indications"}
+
+
+def antenna_alarm(block):
+    return block["antenna_status"] in ("SHORT", "OPEN")
+
+
+def jamming_alarm(block):
+    return block["jamming_state"] >= 2
+
+
+def spoofing_alarm(spoof_state):
+    return spoof_state >= 2
+
+
+def rf_monitor_known(blocks):
+    """The jamming monitor reported a state (0 means unknown or disabled) for every block."""
+    return bool(blocks) and all(b["jamming_state"] != 0 for b in blocks)
+
+
 def host_utc():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds")
 
@@ -137,13 +160,13 @@ class State:
             issues.append("Firmware identity unavailable: UBX input/output may be disabled or MON-VER is unanswered")
         if self.rejected:
             issues.append("Receiver rejected polls: " + ", ".join(sorted(self.rejected)))
-        if self.fresh("MON-RF", now, 15):
+        if self.fresh("MON-RF", now, RF_FRESH_S):
             for block in self.messages["MON-RF"]["blocks"]:
-                if block["antenna_status"] in ("SHORT", "OPEN"):
+                if antenna_alarm(block):
                     issues.append("Antenna supervisor reports " + block["antenna_status"] + "; interpret against this board's antenna/supervisor wiring")
-                if block["jamming_state"] >= 2:
+                if jamming_alarm(block):
                     issues.append("Receiver reports RF interference (state " + str(block["jamming_state"]) + ")")
-        if self.fresh("NAV-STATUS", now) and self.messages["NAV-STATUS"]["spoof_state"] >= 2:
+        if self.fresh("NAV-STATUS", now) and spoofing_alarm(self.messages["NAV-STATUS"]["spoof_state"]):
             issues.append("Receiver reports spoofing indication; verify location with an independent source")
         return issues
 
@@ -167,12 +190,12 @@ class State:
             nav["fix_type"] if nav else "No fix evidence; test outdoors before concluding RF hardware is faulty")
         malformed = framer.counts["checksum_errors"] + framer.counts["truncated_frames"] + framer.counts["oversize_frame"] + self.decode_errors
         add("protocol_integrity", "WARN" if malformed else "PASS", f"{malformed} corrupt, truncated, oversized or undecodable frames")
-        for name, limit in (("NAV-SAT", self.stale_after), ("MON-RF", 15), ("NAV-STATUS", self.stale_after)):
+        for name, limit in (("NAV-SAT", self.stale_after), ("MON-RF", RF_FRESH_S), ("NAV-STATUS", self.stale_after)):
             add(name, "PASS" if self.fresh(name, now, limit) else "WARN",
                 "Recent response received" if self.fresh(name, now, limit) else "Unavailable/stale; not evidence of hardware failure by itself")
         rf_issues = [i for i in self.issues(now, framer) if "Antenna supervisor" in i or "RF interference" in i or "spoofing indication" in i]
         rf_blocks = self.messages.get("MON-RF", {}).get("blocks", [])
-        rf_known = self.fresh("MON-RF", now, 15) and bool(rf_blocks) and all(b["jamming_state"] != 0 for b in rf_blocks)
+        rf_known = self.fresh("MON-RF", now, RF_FRESH_S) and rf_monitor_known(rf_blocks)
         add("rf_health", "WARN" if rf_issues or not rf_known else "PASS",
             "; ".join(rf_issues) or ("No RF alarm in recent MON-RF" if rf_known else "RF/interference health unknown or monitor unavailable"))
         add("receiver_errors", "FAIL" if self.receiver_errors else "PASS", f"{self.receiver_errors} receiver error messages during this session")

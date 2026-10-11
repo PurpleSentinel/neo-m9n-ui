@@ -177,6 +177,62 @@ class SatelliteTests(unittest.TestCase):
         self.assertIn("not evidence of a hardware fault", result["nodata_text"])
 
 
+class ReceiverTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "receiver", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_rf_fault_marks_antenna_jamming_and_spoofing(self):
+        result = self.probe(M9N_FAULT="rf")
+        rf = result["rf"][0]
+        self.assertEqual(rf["antenna"], "SHORT")
+        self.assertEqual(rf["jamming"], "critical interference (state 3)")
+        self.assertEqual(rf["cw"], "220 / 255")
+        self.assertEqual(result["rf_alarms"], [["antenna", "jamming"]])
+        self.assertEqual(result["values"]["spoof"], "spoofing indicated (state 2)")
+        self.assertIn("spoof", result["alarms"])
+        self.assertEqual(result["values"]["mode"], "passive: no polls sent")
+
+    def test_healthy_demo_has_no_alarms(self):
+        result = self.probe()
+        self.assertEqual(result["rf_alarms"], [[]])
+        self.assertEqual(result["alarms"], [])
+        self.assertEqual(result["rf"][0]["jamming"], "no interference (state 1)")
+        self.assertTrue(result["note"].startswith("Received"))
+        self.assertEqual(result["values"]["ttff"], "24.0 s")
+        self.assertEqual(result["values"]["rejected"], "none")
+
+    def test_disabled_jamming_monitor_explains_warn(self):
+        import struct
+        from m9n.demo import sample
+        from m9n.protocol import ubx
+        block = bytes((0, 0, 2, 1)) + bytes(8) + struct.pack("<HH", 90, 1000) + bytes(8)
+        with tempfile.TemporaryDirectory() as d:
+            capture = Path(d) / "rf0.ubx"
+            capture.write_bytes(sample() + ubx(10, 56, bytes((0, 1, 0, 0)) + block))
+            result = self.probe(M9N_CAPTURE=str(capture))
+        self.assertIn("state 0", result["note"])
+        self.assertIn("WARN", result["note"])
+        self.assertEqual(result["rf"][0]["jamming"], "unknown or monitor disabled (state 0)")
+
+    def test_silent_receiver_rf_unknown(self):
+        result = self.probe(M9N_FAULT="silent")
+        self.assertIn("unknown, not healthy", result["note"])
+        self.assertEqual(result["values"]["MON-RF"], "never received")
+        self.assertEqual(result["values"]["ttff"], "unavailable")
+
+
 class SetupTests(unittest.TestCase):
     def test_setup_drives_a_session_and_persists(self):
         with headless_display() as env, tempfile.TemporaryDirectory() as out:

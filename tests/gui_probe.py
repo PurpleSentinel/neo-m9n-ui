@@ -245,6 +245,27 @@ def satellites(win):
     later(1300, first_refresh)
 
 
+def receiver(win):
+    page = win.pages["receiver"]
+    capture = os.environ.get("M9N_CAPTURE")
+    config = (SessionConfig(source="replay", capture=Path(capture)) if capture else
+              SessionConfig(source="demo", fault=os.environ.get("M9N_FAULT") or None))
+
+    def inspect():
+        alarms = lambda rows: sorted(k for k, r in rows.items() if getattr(r, "alarm_icon", None)  # noqa: E731
+                                     and r.alarm_icon.get_visible())
+        result["note"] = page.rf_note.get_title()
+        result["rf"] = [{k: r.value.get_label() for k, r in rows.items()} for rows in page.rf_rows]
+        result["rf_alarms"] = [alarms(rows) for rows in page.rf_rows]
+        result["values"] = {k: r.value.get_label() for k, r in page.rows.items()}
+        result["alarms"] = alarms(page.rows)
+        if win.runner.running:
+            win.runner.stop()
+        later(100, app.quit)
+    win.start_session(config)
+    later(1300, inspect)
+
+
 def on_activate(_app):
     result["activations"] += 1
     if result["activations"] == 1:
