@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- `scripts/make-offline-map.sh` keeps its summary on screen (#52). Planetiler's full output now goes to `planetiler.log` in the working folder, and the script shows short progress steps instead. A failed build shows the end of the log. `--verbose` shows everything as before. Running it with no area now says so, with an example.
+
 ## 3.0.0 (2026-10-11)
 
 A major release: maps. The new **Map** page shows your live position and track on a grid, on an opt-in online OpenStreetMap map, or on an **offline map file** made once at home, which works in a vehicle with no internet. Because the app can now go online (only when you switch the map to Online), and the Python package is renamed, this is 3.0.0.
