@@ -64,6 +64,10 @@ class LogList(Gtk.Box):
         if monospace:
             self.list.add_css_class("monospace")
         self.scrolled = Gtk.ScrolledWindow(child=self.list, vexpand=True)
+        # Follow new lines until the user scrolls away from the bottom; scrolling back resumes it.
+        # Growing content does not change the scroll value, so only real scrolling updates this.
+        self.following = True
+        self.scrolled.get_vadjustment().connect("value-changed", self.on_scrolled)
         self.scrolled.add_css_class("card")
         self.empty = Gtk.Label(label=placeholder, vexpand=True)
         self.empty.add_css_class("dim-label")
@@ -122,10 +126,20 @@ class LogList(Gtk.Box):
     def on_level(self, *_):
         self.level = LEVELS[self.level_menu.get_selected()][1]
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
+        self.follow_end()
 
     def on_search(self, *_):
         self.query = self.search.get_text().casefold()
         self.filter.changed(Gtk.FilterChange.DIFFERENT)
+        self.follow_end()
+
+    def on_scrolled(self, adjustment):
+        self.following = adjustment.get_value() >= adjustment.get_upper() - adjustment.get_page_size() - 4
+
+    def follow_end(self):
+        count = self.filtered.get_n_items()
+        if self.following and count:
+            self.list.scroll_to(count - 1, Gtk.ListScrollFlags.NONE, None)
 
     # Batched appends -----------------------------------------------------
 
@@ -139,16 +153,11 @@ class LogList(Gtk.Box):
         entries, self.pending = self.pending[-MAX_ROWS:], []
         if not entries:
             return GLib.SOURCE_REMOVE
-        adjustment = self.scrolled.get_vadjustment()
-        # Follow new lines only while the user is at the bottom; scrolling up pauses it.
-        following = adjustment.get_value() >= adjustment.get_upper() - adjustment.get_page_size() - 4
         self.store.splice(self.store.get_n_items(), 0, entries)
         excess = self.store.get_n_items() - MAX_ROWS
         if excess > 0:
             self.store.splice(0, excess, [])
-        count = self.filtered.get_n_items()
-        if following and count:
-            self.list.scroll_to(count - 1, Gtk.ListScrollFlags.NONE, None)
+        self.follow_end()
         return GLib.SOURCE_REMOVE
 
     def clear(self):
