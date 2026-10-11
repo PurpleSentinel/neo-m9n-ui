@@ -4,7 +4,8 @@ The application is a single-process Python CLI that owns one Linux tty for a ses
 
 | Module | Responsibility |
 | --- | --- |
-| `transport.py` | Linux USB tty discovery, termios raw-mode transport, read polling, bounded writes, locking and disconnect detection |
+| `hostinfo.py` | Read-only host inventory: USB tty discovery with `/dev/serial/by-id` aliases, u-blox auto-selection, access/driver checks and the diagnostics document; command execution is left to the front end |
+| `transport.py` | Termios raw-mode transport, read polling, queued non-blocking writes, locking and disconnect detection |
 | `protocol.py` | Incremental mixed-protocol framing, UBX/NMEA checksums, bounds/recovery and selected message decoding |
 | `session.py` | Read-only UBX poll schedule, poll deadlines, rejected-message handling and logging |
 | `state.py` | Latest messages, frame/message counts, monotonic freshness/epoch progress, health checks and reports |

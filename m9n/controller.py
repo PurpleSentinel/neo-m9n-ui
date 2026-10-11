@@ -16,7 +16,8 @@ from pathlib import Path
 from .demo import sample
 from .serialize import json_line, safe
 from .session import Session
-from .transport import SerialPort, choose_port
+from .hostinfo import choose_port
+from .transport import SerialPort
 
 LOG = logging.getLogger("m9n")
 FORMATTER = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
