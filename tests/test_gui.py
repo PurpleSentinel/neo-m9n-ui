@@ -309,7 +309,7 @@ class LifecycleTests(unittest.TestCase):
                                         M9N_TRIGGER=trigger, M9N_MODE=mode, **env)
             self.assertIsNotNone(result, process.stderr)
             self.assertNotIn("timeout", result, process.stderr)
-            for warning in ("CRITICAL", "Source ID"):
+            for warning in ("-CRITICAL **", "Source ID"):  # GLib/GTK criticals, not our own log lines.
                 self.assertNotIn(warning, process.stderr)
             self.assertTrue(result["started"], process.stderr)
             self.assertEqual(result["running_button"], "Stop")

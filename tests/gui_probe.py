@@ -27,6 +27,19 @@ def later(ms, func):
     GLib.timeout_add(ms, lambda: bool(func()) and False)
 
 
+def wait_for(predicate, then, timeout_ms=3000):
+    """Call then(bool) once predicate holds or the deadline passes; layout is asynchronous."""
+    deadline = GLib.get_monotonic_time() + timeout_ms * 1000
+
+    def poll():
+        ok = predicate()
+        if ok or GLib.get_monotonic_time() > deadline:
+            then(ok)
+            return False
+        return True
+    GLib.timeout_add(50, poll)
+
+
 def page_names(win):
     pages = win.stack.get_pages()
     return [pages.get_item(i).get_name() for i in range(pages.get_n_items())]
@@ -43,7 +56,9 @@ def dialog_name(win, action):
 
 def shell(win):
     result["pages"] = page_names(win)
-    result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage) for w in win.pages.values())
+    # Messages always shows content: the application log matters before any session.
+    result["empty_states"] = all(isinstance(w.stack.get_visible_child(), Adw.StatusPage)
+                                 for key, w in win.pages.items() if key != "messages")
     result["toggle_enabled"] = win.lookup_action("toggle-session").get_enabled()
     result["accels"] = {a: app.get_accels_for_action(a) for a in ("app.quit", "app.shortcuts", "win.toggle-session")}
     result["about"] = dialog_name(win, "about")
@@ -306,11 +321,13 @@ def messages(win):
         app_log.flush()
         result["bounded"] = app_log.store.get_n_items()
         result["last_line"] = app_log.store.get_item(app_log.store.get_n_items() - 1).text
-        later(400, step2)
-
-    def step2():
         adj = app_log.scrolled.get_vadjustment()
-        result["following"] = adj.get_value() >= adj.get_upper() - adj.get_page_size() - 4
+        wait_for(lambda: adj.get_upper() > adj.get_page_size()
+                 and adj.get_value() >= adj.get_upper() - adj.get_page_size() - 4, step2)
+
+    def step2(following):
+        adj = app_log.scrolled.get_vadjustment()
+        result["following"] = following
         adj.set_value(0)
         for i in range(50):
             app_log.add(app_log.store.get_item(0).__class__("t", logging.INFO, "Info", f"more {i}"))
