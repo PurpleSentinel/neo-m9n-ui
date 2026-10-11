@@ -1,6 +1,5 @@
 """Command-line entry point, Linux host diagnostics and lifecycle handling."""
 import argparse
-import contextlib
 import logging
 import math
 import os
@@ -8,14 +7,13 @@ import platform
 import shutil
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 from . import __version__
-from .demo import sample
-from .display import json_line, render, report_text, safe
-from .session import Session
-from .transport import SerialPort, choose_port, devices
+from .controller import FORMATTER, INTERRUPTED, SessionConfig, SessionController, run_until_finished, validate
+from .display import render, report_text
+from .serialize import json_line, safe
+from .transport import choose_port, devices
 
 LOG = logging.getLogger("m9n")
 
@@ -70,165 +68,77 @@ def parser():
     return p
 
 
-def setup_logging(args, stack, interactive):
-    handlers = []
-    if args.log_file:
-        handler = logging.FileHandler(args.log_file, encoding="utf-8")
-        stack.callback(handler.close)
-        handlers.append(handler)
-    # Logs must not overwrite a live dashboard. File handler retains verbose data.
+def setup_logging(args, interactive):
+    # Logs must not overwrite a live dashboard. A log file keeps the full verbosity.
     console = logging.StreamHandler(sys.stderr)
     console.setLevel(logging.ERROR if interactive else logging.DEBUG if args.debug else logging.INFO)
-    handlers.append(console)
+    console.setFormatter(FORMATTER)
     LOG.handlers.clear()
     LOG.propagate = False
-    LOG.setLevel(logging.DEBUG if args.debug else logging.INFO)
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
-    for handler in handlers:
-        handler.setFormatter(formatter)
-        LOG.addHandler(handler)
+    LOG.addHandler(console)
 
 
-def emit(snapshot, args, interactive, json_log):
-    if json_log:
-        json_log.write(json_line(snapshot) + "\n")
-        json_log.flush()
-    if args.command == "test" and args.json:
-        # Test JSON stdout is exactly one final report, suitable for jq/automation.
-        return
-    print(json_line(snapshot) if args.json else render(snapshot, interactive), flush=True)
-
-
-def same_file(a, b):
-    if a.resolve() == b.resolve():
-        return True
-    try:
-        return os.path.samefile(a, b)
-    except OSError:
-        return False
+def config_from_args(args):
+    command = args.command
+    return SessionConfig(
+        source={"watch": "device", "test": "device"}.get(command, command),
+        mode="test" if command == "test" else "watch",
+        port=getattr(args, "port", None), baud=getattr(args, "baud", 9600),
+        passive=getattr(args, "passive", False), fault=getattr(args, "fault", None),
+        capture=getattr(args, "capture", None), duration=getattr(args, "duration", 0.0),
+        interval=args.interval, stale_after=args.stale_after, debug=args.debug,
+        raw_log=getattr(args, "raw_log", None), json_log=args.json_log, log_file=args.log_file,
+        report=getattr(args, "report", None))
 
 
 def validate_outputs(args):
-    outputs = [getattr(args, key, None) for key in ("raw_log", "json_log", "log_file", "report")]
-    outputs = [p for p in outputs if p is not None]
-    for i, path in enumerate(outputs):
-        if path.exists() and not path.is_file():
-            raise ValueError(f"Output must be a regular file, not a device or directory: {path}")
-        for other in outputs[i + 1:]:
-            if same_file(path, other):
-                raise ValueError("Each output must have a distinct file path")
-        if args.command == "replay" and same_file(path, args.capture):
-            raise ValueError("Output path must not overwrite the replay capture")
-        if args.command in ("watch", "test") and args.port and same_file(path, Path(args.port)):
-            raise ValueError("Output path must not be the serial device")
+    validate(config_from_args(args))
 
 
 def run(args):
-    if args.command == "test" and not args.duration:
-        raise ValueError("test --duration must be greater than zero")
-    validate_outputs(args)
-    started = time.monotonic()
+    config = config_from_args(args)
+    validate(config)
     interactive = args.command != "test" and sys.stdout.isatty() and not args.plain and not args.json
-    with contextlib.ExitStack() as stack:
-        setup_logging(args, stack, interactive)
-        json_log = stack.enter_context(args.json_log.open("a", encoding="utf-8")) if args.json_log else None
-        raw_log = stack.enter_context(args.raw_log.open("xb")) if getattr(args, "raw_log", None) else None
-        port = None
-        capture = None
-        if args.command in ("watch", "test"):
-            selected = choose_port(args.port)
-            port = SerialPort(selected, args.baud)
-            stack.callback(port.close)
-            source = selected
-            LOG.info("Opened %s; %s", selected, "passive mode" if args.passive else "diagnostic polls enabled; receiver configuration unchanged")
-        elif args.command == "replay":
-            capture = stack.enter_context(args.capture.open("rb"))
-            source = "REPLAY (recorded data): " + str(args.capture)
-        else:
-            source = "SYNTHETIC DEMO"
-        session = Session(started, args.stale_after, getattr(args, "passive", False) or port is None, source)
-        next_display = started
-        next_demo = started
-        previous_issues = set()
-        received_something = False
-        interrupted = False
-        transport_error = None
-        if interactive:
-            print("\x1b[?25l", end="", flush=True)
+
+    def show(snapshot):
+        if args.command == "test" and args.json:
+            # Test JSON stdout is exactly one final report, suitable for jq/automation.
+            return
+        print(json_line(snapshot) if args.json else render(snapshot, interactive), flush=True)
+
+    setup_logging(args, interactive)
+    controller = SessionController(config, on_snapshot=show)
+    controller.start()
+    if interactive:
+        print("\x1b[?25l", end="", flush=True)
+    try:
         try:
-            while True:
-                now = time.monotonic()
-                if args.command != "replay" and args.duration and now - started >= args.duration:
-                    break
-                if port:
-                    try:
-                        session.poll(port, now)
-                        data = port.read(0.1)
-                    except OSError as exc:
-                        transport_error = str(exc)
-                        LOG.error("USB transport failed: %s", safe(exc))
-                        break
-                    now = time.monotonic()
-                elif capture:
-                    data = capture.read(256)
-                    if not data:
-                        # Flush any partial last frame without real-time waiting.
-                        session.consume(b"", now + session.framer.timeout)
-                        break
-                else:
-                    data = b""
-                    if now >= next_demo:
-                        epoch = 1000 if args.fault == "frozen" else 1000 + int((now - started) * 1000)
-                        data = b"" if args.fault == "silent" else sample(epoch, args.fault)
-                        next_demo = now + 1
-                    time.sleep(0.05)
-                if raw_log and data:
-                    raw_log.write(data)
-                    raw_log.flush()
-                received_something |= bool(data)
-                session.consume(data, now)
-                issues = set(session.state.issues(now, session.framer))
-                for issue in sorted(issues - previous_issues):
-                    LOG.warning("%s", issue)
-                for issue in sorted(previous_issues - issues):
-                    LOG.info("Resolved: %s", issue)
-                previous_issues = issues
-                if now >= next_display and not capture:
-                    emit(session.snapshot(now), args, interactive, json_log)
-                    next_display = now + args.interval
+            run_until_finished(controller)
         except KeyboardInterrupt:
-            interrupted = True
-            LOG.info("Stopped by user")
-        finally:
-            if interactive:
-                print("\x1b[?25h", flush=True)
-        now = time.monotonic()
-        if args.command == "test":
-            report = session.report(now)
-            if transport_error:
-                report["checks"].append({"name": "usb_transport", "status": "FAIL", "detail": transport_error})
-                report["status"] = "FAIL"
-                report["exit_code"] = 1
-            if interrupted:
-                report["status"] = "INTERRUPTED"
-                report["exit_code"] = 130
-            if args.report:
-                args.report.write_text(json_line(report) + "\n", encoding="utf-8")
-            if json_log:
-                json_log.write(json_line(report) + "\n")
-                json_log.flush()
-            print(json_line(report) if args.json else report_text(report), flush=True)
-            return report["exit_code"]
-        emit(session.snapshot(now), args, False, json_log)
-        if transport_error:
-            return 1
-        if interrupted:
-            return 130
-        if args.command == "replay":
-            return 0 if received_something and session.state.navigation(now) else 1
-        if args.command == "watch":
-            return 0 if session.framer.counts["ubx_frames"] + session.framer.counts["nmea_frames"] else 1
-        return 0
+            controller.stop(INTERRUPTED)
+    finally:
+        controller.close()
+        if interactive:
+            print("\x1b[?25h", flush=True)
+    result = controller.result
+    if args.command == "test":
+        print(json_line(result.report) if args.json else report_text(result.report), flush=True)
+        code = result.report["exit_code"]
+    else:
+        print(json_line(result.snapshot) if args.json else render(result.snapshot, False), flush=True)
+        if result.transport_error:
+            code = 1
+        elif result.reason == INTERRUPTED:
+            code = 130
+        elif args.command == "replay":
+            code = 0 if result.received_bytes and result.snapshot["navigation"] else 1
+        elif args.command == "watch":
+            code = 0 if result.valid_frames else 1
+        else:
+            code = 0
+    for error in result.output_errors:
+        print(f"ERROR: {safe(error)}", file=sys.stderr)
+    return 1 if result.output_errors and code in (0, 2) else code
 
 
 def command_output(command):

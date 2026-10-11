@@ -43,11 +43,14 @@ def choose_port(explicit=None):
 
 
 class SerialPort:
-    def __init__(self, path, baud=9600):
+    def __init__(self, path, baud=9600, write_timeout=1.0):
         self.fd = None
         self.old_attrs = None
         self.exclusive = False
         self.path = path
+        self.write_timeout = write_timeout
+        self.tx = bytearray()
+        self.tx_deadline = None
         speed = getattr(termios, f"B{baud}", None)
         if speed is None:
             raise ValueError(f"Unsupported termios baud rate: {baud}")
@@ -67,6 +70,10 @@ class SerialPort:
         except (OSError, ValueError):
             self.close()
             raise
+        except termios.error as exc:
+            # termios.error is not an OSError; callers handle OSError only.
+            self.close()
+            raise OSError(*exc.args) from exc
 
     def read(self, timeout=0.1):
         poll = select.poll()
@@ -74,44 +81,59 @@ class SerialPort:
         ready = poll.poll(max(0, int(timeout * 1000)))
         if not ready:
             return b""
-        if ready[0][1] & (select.POLLHUP | select.POLLERR | select.POLLNVAL):
+        events = ready[0][1]
+        if events & select.POLLIN:
+            # Drain bytes received before a hang-up; the next read reports it.
+            try:
+                data = os.read(self.fd, 8192)
+            except BlockingIOError:
+                data = None
+            if data:
+                return data
+            if data is not None:
+                raise OSError("USB tty reached EOF (device disconnected)")
+        if events & (select.POLLHUP | select.POLLERR | select.POLLNVAL):
             raise OSError("USB tty disconnected or reported a kernel I/O error")
-        try:
-            data = os.read(self.fd, 8192)
-        except BlockingIOError:
-            return b""
-        if not data:
-            raise OSError("USB tty reached EOF (device disconnected)")
-        return data
+        return b""
 
     def write(self, data):
-        view = memoryview(data)
-        deadline = time.monotonic() + 1.0
-        while view:
-            if time.monotonic() > deadline:
-                raise TimeoutError("USB tty write timed out")
-            _, writable, _ = select.select([], [self.fd], [], 0.1)
-            if not writable:
-                continue
+        """Queue data and send what the tty accepts now; never blocks."""
+        if not self.tx:
+            self.tx_deadline = time.monotonic() + self.write_timeout
+        self.tx.extend(data)
+        self.flush()
+
+    def flush(self):
+        """Continue a queued write; raise TimeoutError once it is overdue."""
+        while self.tx:
             try:
-                count = os.write(self.fd, view)
+                count = os.write(self.fd, self.tx)
             except BlockingIOError:
-                continue
+                break
             if count <= 0:
                 raise OSError(errno.EIO, "USB tty write made no progress")
-            view = view[count:]
+            del self.tx[:count]
+        if not self.tx:
+            self.tx_deadline = None
+        elif time.monotonic() > self.tx_deadline:
+            raise TimeoutError("USB tty write timed out")
 
     def close(self):
-        if self.fd is not None:
+        if self.fd is None:
+            return
+        fd, self.fd = self.fd, None
+        self.tx.clear()
+        try:
             if self.old_attrs is not None:
                 try:
-                    termios.tcsetattr(self.fd, termios.TCSANOW, self.old_attrs)
-                except OSError:
-                    pass
+                    termios.tcsetattr(fd, termios.TCSANOW, self.old_attrs)
+                except (OSError, termios.error):
+                    pass  # An unplugged tty cannot be restored; still close it.
             if self.exclusive:
                 try:
-                    fcntl.ioctl(self.fd, termios.TIOCNXCL)
+                    fcntl.ioctl(fd, termios.TIOCNXCL)
                 except OSError:
                     pass
-            os.close(self.fd)
-            self.fd = None
+        finally:
+            # Closing the descriptor also releases the flock.
+            os.close(fd)

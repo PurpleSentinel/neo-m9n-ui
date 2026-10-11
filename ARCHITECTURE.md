@@ -8,9 +8,15 @@ The application is a single-process Python CLI that owns one Linux tty for a ses
 | `protocol.py` | Incremental mixed-protocol framing, UBX/NMEA checksums, bounds/recovery and selected message decoding |
 | `session.py` | Read-only UBX poll schedule, poll deadlines, rejected-message handling and logging |
 | `state.py` | Latest messages, frame/message counts, monotonic freshness/epoch progress, health checks and reports |
-| `display.py` | Plain/ANSI terminal rendering, control-character escaping and JSON serialization |
-| `cli.py` | Commands, host diagnostics, files, interruption handling and exit codes |
+| `controller.py` | UI-independent session lifecycle: configuration validation, source (device/demo/replay), evidence files, snapshot/issue callbacks, ordered stop and guaranteed tty release |
+| `serialize.py` | Control-character escaping and JSON serialization shared by front ends |
+| `display.py` | Plain/ANSI terminal rendering |
+| `cli.py` | Commands, host diagnostics, console logging, interruption handling and exit codes; drives `controller.py` |
 | `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests |
+
+## Session lifecycle
+
+`SessionController` owns one session. A front end calls `on_readable()` when the tty fd is readable and `tick()` about every 100 ms; `run_until_finished()` provides that loop for the CLI. The device is opened before any evidence file is created, and every output path is validated up front. `stop()` always runs the same order: close the tty (restore termios, clear `TIOCEXCL`, release the lock), build the report or final snapshot, then write the report file, append the final JSONL record and close every file. The result is held in memory before any disk write, so a failing disk cannot discard a completed test. Tty writes are queued and never block the caller; an overdue write is a transport failure.
 
 ## Communication and polling
 

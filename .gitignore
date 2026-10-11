@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Evidence files contain location data and receiver identifiers.
+captures/
+reports/
+*.ubx
+*.jsonl
