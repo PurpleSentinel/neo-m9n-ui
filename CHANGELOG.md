@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Export Track** as GPX (#55): a button on the Vehicle and Map pages and **Ctrl+E**.
+  - **Contents:** a GPX 1.1 file of every valid position since the trip started, with height, GNSS time, speed and course (Garmin TrackPointExtension). New segments start after gaps over 10 s.
+  - **Saving:** written only where you choose. It works after Stop too.
+  - **Checked:** against the GPX 1.1 and TrackPointExtension schemas.
+
+### Changed
+- **At phone width,** the Vehicle page hides its fullscreen button (F11 still works), as the Map page already did, and the Map page hides Export Track (use the Vehicle page or Ctrl+E).
+
 ## 3.1.1 (2026-10-12)
 
 Night mode: switch the app to dark with one tap, or let it follow the sun.

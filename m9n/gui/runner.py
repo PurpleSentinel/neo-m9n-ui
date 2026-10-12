@@ -81,6 +81,9 @@ class SessionRunner(GObject.Object):
         if self.controller:
             self.controller.reset_trip()
 
+    def track_points(self):
+        return self.controller.track_points() if self.controller else []
+
     def _detach(self):
         sources, self._sources = self._sources, []
         for source in sources:

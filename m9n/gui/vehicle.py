@@ -104,6 +104,18 @@ def rounded_rect(cr, x, y, w, h, r):
     cr.close_path()
 
 
+EXPORT_TOOLTIP = "Export the track as GPX (Ctrl+E)"
+NO_TRACK_TOOLTIP = "No track to export yet: it needs a position fix"
+
+
+def export_button():
+    """Export Track: saves the trip's track as a GPX file (the window's win.export-track action)."""
+    button = Gtk.Button(icon_name="document-save-symbolic", action_name="win.export-track",
+                        valign=Gtk.Align.CENTER, tooltip_text=NO_TRACK_TOOLTIP)
+    button.update_property([Gtk.AccessibleProperty.LABEL], ["Export track as GPX"])
+    return button
+
+
 class Instrument(Gtk.DrawingArea):
     """A drawn instrument that fills whatever space the page gives it."""
 
@@ -403,7 +415,8 @@ class VehiclePage(SessionPage):
         toolbar = Gtk.Box(spacing=8)
         toolbar.append(self.status)
         toolbar.append(Gtk.Box(hexpand=True))
-        for widget in (units, reset, night_button(), self.fullscreen_button):
+        self.export_button = export_button()
+        for widget in (units, reset, self.export_button, night_button(), self.fullscreen_button):
             toolbar.append(widget)
 
         self.speed = SpeedGauge()
@@ -446,6 +459,7 @@ class VehiclePage(SessionPage):
             breakpoint.add_setter(self.main, "homogeneous", False)
             if condition == COMPACT:  # Phone width: the reset button keeps only its icon.
                 breakpoint.add_setter(reset_content, "label", "")
+                breakpoint.add_setter(self.fullscreen_button, "visible", False)  # F11 still works.
             self.adaptive.add_breakpoint(breakpoint)
         return self.adaptive
 

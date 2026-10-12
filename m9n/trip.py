@@ -7,11 +7,15 @@ segments are skipped; a jump implying an impossible speed is treated as a glitch
 """
 import math
 
+from .sun import gnss_datetime
+
 EARTH_RADIUS_M = 6371008.8
 MOVING_M_S = 0.5  # Below this the receiver is treated as stationary.
 GLITCH_M_S = 150.0  # Implied speed above this (540 km/h) is a position glitch, not travel.
 WEEK_S = 604800
 DAY_S = 86400
+SEGMENT_GAP_S = 10.0  # A longer gap between valid fixes (a tunnel) starts a new track segment.
+MAX_POINTS = 200000  # About 55 hours at 1 Hz; beyond this the older half is thinned.
 
 
 def distance_m(lat1, lon1, lat2, lon2):
@@ -35,11 +39,45 @@ def gnss_time(nav):
     return None
 
 
+class Track:
+    """Every valid epoch's position since the trip started, for export (e.g. GPX).
+
+    Each point is a dict: utc (ISO 8601 or None), lat, lon, alt (MSL, m), speed (m/s),
+    course (deg) and start (True where a new segment begins: the first point, or after a gap).
+    """
+
+    def __init__(self, limit=MAX_POINTS):
+        self.limit = limit
+        self.points = []
+
+    def reset(self):
+        self.points = []
+
+    def add(self, nav, gap_s):
+        """Add an epoch; gap_s is the GNSS time since the previous point, or None if unknown."""
+        when = gnss_datetime(nav)
+        self.points.append({
+            "utc": when.strftime("%Y-%m-%dT%H:%M:%SZ") if when else None,
+            "lat": nav["latitude"], "lon": nav["longitude"], "alt": nav.get("altitude_msl_m"),
+            "speed": nav.get("speed_m_s"), "course": nav.get("heading_deg"),
+            "start": not self.points or gap_s is None or gap_s > SEGMENT_GAP_S})
+        if len(self.points) > self.limit:
+            self.thin()
+
+    def thin(self):
+        """Drop every other point in the older half, keeping segment starts and the newest points."""
+        half = len(self.points) // 2
+        older = [p for i, p in enumerate(self.points[:half]) if i % 2 == 0 or p["start"]]
+        self.points = older + self.points[half:]
+
+
 class Trip:
     def __init__(self):
+        self.track = Track()
         self.reset()
 
     def reset(self):
+        self.track.reset()
         self.distance_m = 0.0
         self.moving_s = 0.0
         self.max_speed_m_s = None
@@ -59,10 +97,12 @@ class Trip:
         speed = nav.get("speed_m_s")
         if speed is not None:
             self.max_speed_m_s = speed if self.max_speed_m_s is None else max(self.max_speed_m_s, speed)
+        gap = None
         if self.last and self.last[0] == clock:
             dt = t - self.last[1]
             if dt < 0:
                 dt += WEEK_S if clock == "tow" else DAY_S
+            gap = dt
             step = distance_m(self.last[2], self.last[3], lat, lon)
             implied = step / dt if dt else 0
             # Moving at either end: the segment into a stop is still travel.
@@ -72,6 +112,7 @@ class Trip:
                 self.distance_m += step
                 self.moving_s += dt
         self.last = (clock, t, lat, lon, speed)
+        self.track.add(nav, gap)
         self.epochs += 1
         return True
 

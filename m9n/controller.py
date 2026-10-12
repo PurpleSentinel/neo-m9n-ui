@@ -222,6 +222,10 @@ class SessionController:
         if self.session:
             self.session.state.trip.reset()
 
+    def track_points(self):
+        """A copy of the trip's track (see trip.Track), also after the session has ended."""
+        return list(self.session.state.trip.track.points) if self.session else []
+
     def progress(self, now=None):
         """Fraction complete for replay or a timed session, otherwise None."""
         if self.config.source == "replay":
