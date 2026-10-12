@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.3 (2026-10-13)
+
+Clock check: how far this computer's clock is from GNSS time.
 
 ### Added
 - **Clock check** (#59): how far this computer's clock is from GNSS time, e.g. *in step (±0.2 s)*, *1.3 s fast* or *42 s slow*.
