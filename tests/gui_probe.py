@@ -4,6 +4,7 @@ import os
 import signal
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -14,10 +15,13 @@ gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, GLib, Gtk  # noqa: E402
 
+from m9n import controller  # noqa: E402
 from m9n.controller import SessionConfig  # noqa: E402
 from m9n.gui.app import Application  # noqa: E402
 
 SCENARIO = sys.argv[1]
+# Reproducible sun times: the demo's GNSS time starts at 2026-10-11 12:00 UTC, except where the clock is tested.
+controller.DEMO_UTC = None if SCENARIO == "host_clock" else datetime(2026, 10, 11, 12, tzinfo=timezone.utc)
 WIDTH = int(os.environ.get("M9N_PROBE_WIDTH", "1000"))
 result = {"activations": 0}
 app = Application()
@@ -397,6 +401,34 @@ def devicetest(win):
         later(100, app.quit)
     win.runner.connect("finished", finished)
     later(700, running)
+
+
+def host_clock(win):
+    """System clock rows (Host, Receiver) and the report's host_clock check, with the demo's real-time clock."""
+    host, receiver, test = win.pages["host"], win.pages["receiver"], win.pages["test"]
+
+    def styles(widget):
+        return [c for c in ("success", "warning", "error", "dim-label") if widget.has_css_class(c)]
+    result["before"] = host.clock_row.get_subtitle()
+
+    def live():
+        result["host"] = {"text": host.clock_row.get_subtitle(), "basis": host.clock_basis.get_subtitle(),
+                          "style": styles(host.clock_row.icon)}
+        value = receiver.rows["clock"].value
+        result["receiver"] = {"text": value.get_label(), "style": styles(value)}
+        result["snapshot"] = host.snapshot["host_clock"] if host.snapshot else None
+
+    def finished(_runner, outcome):
+        check = next(c for c in outcome.report["checks"] if c["name"] == "host_clock")
+        result["check"] = check
+        result["report_status"] = outcome.report["status"]
+        result["test_row"] = next((row.get_subtitle() for row in test.check_rows if row.get_title() == "Host clock"),
+                                  None)
+        later(100, app.quit)
+    win.runner.connect("finished", finished)
+    win.start_session(SessionConfig(source="demo", fault=os.environ.get("M9N_FAULT") or None, mode="test",
+                                    duration=2.5))
+    later(2000, live)
 
 
 def host(win):

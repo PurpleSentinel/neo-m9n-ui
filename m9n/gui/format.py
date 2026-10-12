@@ -1,6 +1,8 @@
 """Text for displayed values. GTK-free; missing values are always "unknown", never blank."""
 from datetime import timedelta
 
+from .. import clock
+
 UNKNOWN = "unknown"
 
 
@@ -136,3 +138,23 @@ def sun_elevation(degrees, phase):
 
 def sun_event(when, polar):
     return local_time(when) if when else POLAR.get(polar, "None today")
+
+
+CLOCK_SOURCES = {"NAV-PVT": "NAV-PVT", "RMC": "NMEA RMC", "ZDA": "NMEA ZDA"}
+
+
+def host_clock(value, live=True):
+    """(text, level) for a snapshot's host_clock; level is 'ok', 'warning', 'error' or None."""
+    if not live:
+        return "Not measured for recorded data", None
+    if not value:
+        return "Waiting for GNSS time", None
+    return clock.describe(value["offset_s"]), clock.level(value["offset_s"])
+
+
+def host_clock_basis(value):
+    if not value:
+        return "Needs a fully resolved UTC time from NAV-PVT, or NMEA RMC or ZDA with a fix"
+    epochs = "epoch" if value["samples"] == 1 else "epochs"
+    return (f"Median of {value['samples']} {epochs} of {CLOCK_SOURCES.get(value['source'], value['source'])}, "
+            f"±{clock.PRECISION_S:g} s")

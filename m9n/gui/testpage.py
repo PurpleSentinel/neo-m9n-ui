@@ -21,7 +21,8 @@ STATUS = {
 }
 CHECKS = {"communication": "Communication", "device_identity": "Device identity", "navigation": "Navigation",
           "position_fix": "Position fix", "protocol_integrity": "Protocol integrity", "rf_health": "RF health",
-          "receiver_errors": "Receiver errors", "usb_transport": "USB transport"}
+          "receiver_errors": "Receiver errors", "usb_transport": "USB transport",
+          "host_clock": "Host clock"}
 GUIDANCE = ("No fix is not proof of broken hardware: indoor reception, antenna placement, initial acquisition and "
             "receiver configuration can all prevent one. RF detector values are indications, not certification. "
             "An unavailable message is reported as unknown rather than healthy.")

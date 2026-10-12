@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Clock check** (#59): how far this computer's clock is from GNSS time, e.g. *in step (±0.2 s)*, *1.3 s fast* or *42 s slow*.
+  - **Where:** a System Clock group on the Host page and a row on the Receiver page. Green under 0.5 s, amber up to 5 s, red beyond with a hint to turn on automatic time.
+  - **How:** the median over the last 30 epochs of fully resolved GNSS time, from NAV-PVT sent at its epoch or else NMEA RMC/ZDA; polled answers, which can be up to a second old, are not used. Stated to ±0.2 s. Not measured for replays. The app never changes the clock.
+  - **Evidence:** snapshots and the JSONL log gain `host_clock`, and device test reports an informational `host_clock` check that doesn't change the result.
+  - **Demo:** its GNSS time now follows the computer's clock, with new *clock fast* (42 s) and *clock slow* (1.5 s) faults.
+
 ## 3.1.2 (2026-10-12)
 
 Export the trip's track as a GPX file.

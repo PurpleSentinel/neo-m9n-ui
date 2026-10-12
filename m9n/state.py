@@ -1,7 +1,9 @@
 """Freshness-aware state and evidence-based health assessment."""
+import time
 from collections import Counter, deque
 from datetime import datetime, timezone
 
+from .clock import ClockCheck, describe, level
 from .trip import Trip
 
 
@@ -50,10 +52,13 @@ class State:
         self.receiver_errors = 0
         self.decode_errors = 0
         self.trip = Trip()
+        self.clock = ClockCheck()
         self.on_recent = None  # Optional callback for every receiver/parser message, in order.
 
-    def ingest(self, event, now):
+    def ingest(self, event, now, received=None):
+        """Record a message; received is the computer's clock (time.time()) when it was read, None for replays."""
         name = event["name"]
+        self.clock.add(event, received, polled=name in self.pending)
         self.counts[name] += 1
         self.messages[name] = event
         self.seen[name] = now
@@ -146,7 +151,7 @@ class State:
                 "rejected_polls": sorted(self.rejected),
                 "message_ages_s": {k: round(now - v, 3) for k, v in self.seen.items()},
                 "issues": self.issues(now, framer), "recent_messages": list(self.recent),
-                "trip": self.trip.summary()}
+                "trip": self.trip.summary(), "host_clock": self.clock.result(time.time())}
 
     def issues(self, now, framer):
         issues = []
@@ -209,7 +214,16 @@ class State:
         add("rf_health", "WARN" if rf_issues or not rf_known else "PASS",
             "; ".join(rf_issues) or ("No RF alarm in recent MON-RF" if rf_known else "RF/interference health unknown or monitor unavailable"))
         add("receiver_errors", "FAIL" if self.receiver_errors else "PASS", f"{self.receiver_errors} receiver error messages during this session")
-        status = "FAIL" if any(c["status"] == "FAIL" for c in checks) else "WARN" if any(c["status"] == "WARN" for c in checks) else "PASS"
+        counted = list(checks)
+        clock = self.clock.result(time.time())
+        if clock:
+            add("host_clock", "PASS" if level(clock["offset_s"]) == "ok" else "WARN",
+                f"Computer clock {describe(clock['offset_s'])} against GNSS time ({clock['source']}, median of "
+                f"{clock['samples']} epochs); informational, not part of the result")
+        else:
+            add("host_clock", "WARN", "Not measured: no fully resolved GNSS time was read live; "
+                "informational, not part of the result")
+        status = "FAIL" if any(c["status"] == "FAIL" for c in counted) else "WARN" if any(c["status"] == "WARN" for c in counted) else "PASS"
         return {"schema_version": 1, "kind": "test_report", "host_utc": host_utc(), "source": self.source,
                 "status": status, "exit_code": {"PASS": 0, "WARN": 2, "FAIL": 1}[status],
                 "checks": checks, "snapshot": self.snapshot(now, framer)}

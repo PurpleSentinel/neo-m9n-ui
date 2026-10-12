@@ -38,7 +38,7 @@ Everything the app draws follows the appearance, including the instruments and o
 | --- | --- | --- |
 | Source | **Source** | USB receiver, Synthetic demo or Replay capture |
 | | **Receiver** | *Automatic* picks the single u-blox (VID 1546) tty and refuses to guess between several. Discovered devices are listed by their stable `/dev/serial/by-id/` name and rescanned every 2 s. *Other path…* accepts any tty path, such as the PTY simulator. |
-| | **Simulated fault** | Demo only: no fix, RF alarm, corrupt frames, frozen epochs, silent receiver, or *Moving vehicle* (no fault: drives a 400 m loop at 11–90 km/h with a hill, for the Vehicle page) |
+| | **Simulated fault** | Demo only: no fix, RF alarm, corrupt frames, frozen epochs, silent receiver, a computer clock 42 s fast or 1.5 s slow, or *Moving vehicle* (no fault: drives a 400 m loop at 11–90 km/h with a hill, for the Vehicle page) |
 | | **Capture file** | Replay only: a raw RX capture (exact bytes, mixed UBX and NMEA) |
 | Session | **Mode** | *Watch* until stopped, or *Device test* |
 | | **Duration** | Watch: seconds, 0 = until stopped. Device test: seconds observed (default 60). |
@@ -84,6 +84,7 @@ Every satellite from NAV-SAT. By default used satellites come first, then the st
 - **MON-RF:** antenna status and power, jamming state, CW suppression, noise, AGC and POST status. Antenna supervision depends on how the board wires it, so OPEN/SHORT are indications, not proof of a fault. If the jamming monitor reports state 0 (unknown or disabled), the page explains that a device test will report RF health as WARN.
 - **NAV-STATUS:** TTFF, receiver uptime, spoofing detector (an indication only).
 - **Freshness:** time since each diagnostic message last arrived, unanswered polls and rejected polls.
+- **Computer clock:** how far this computer's clock is from GNSS time, coloured as on the Host page.
 
 ## Vehicle
 
@@ -162,7 +163,7 @@ Both lists filter by level and search text, keep the newest 5,000 lines, and fol
 
 ## Test
 
-**Run Device Test** (Ctrl+T) switches the setup to a device test and starts it; if the setup is invalid it opens the sidebar and explains why. While it runs you see progress and time remaining, and **Cancel Test** records INTERRUPTED. The result lists every check with its detail. See the result table in the [README](../README.md#device-test-results).
+**Run Device Test** (Ctrl+T) switches the setup to a device test and starts it; if the setup is invalid it opens the sidebar and explains why. While it runs you see progress and time remaining, and **Cancel Test** records INTERRUPTED. The result lists every check with its detail. *Host clock* records how far the computer's clock was from GNSS time; it is informational and doesn't change PASS, WARN or FAIL. See the result table in the [README](../README.md#device-test-results).
 
 The report is never lost. The page shows where it was saved; if no report file was configured, or writing it failed, **Save Report…** writes it now. **Copy report JSON** is always available. The window switches to this page when a test finishes.
 
@@ -175,11 +176,13 @@ Read-only host checks, run when you first open the page and again with Refresh:
 - the USB serial devices
 - raw output of `lsusb`, `udevadm info`, `fuser -v` and `systemctl is-active`
 
+**System Clock** compares this computer's clock with GNSS time during a session, for example *in step (±0.2 s)*, *1.3 s fast* or *42 s slow*. Green is under 0.5 s, amber up to 5 s, and red beyond, with a hint to turn on automatic time. Log and evidence timestamps come from this clock, so a wrong one makes them wrong too. It needs a fully resolved UTC time from the receiver (NAV-PVT, or NMEA RMC or ZDA with a fix), and shows *Waiting for GNSS time* until then. It is the median over the last 30 epochs, stated to ±0.2 s, because USB delivery adds a little delay. Polled NAV-PVT answers can be up to a second old, so with default receiver settings the comparison uses NMEA RMC. A replay isn't compared: its times are from when it was recorded. The app never changes the clock; see [Troubleshooting](TROUBLESHOOTING.md#fixing-a-wrong-clock).
+
 Missing tools are reported, not fatal, and each command is limited to 3 seconds. ModemManager is fine when udev marks the receiver `ID_MM_DEVICE_IGNORE=1`. If access is denied, **Grant Access** lists the udev rule commands to copy; the app never runs privileged commands. The page never opens the receiver's tty, so it is safe while a session runs. *Copy* and *Save as JSON* produce the same document the old `doctor --json` printed.
 
 ## Replay and demo
 
-A replay decodes the capture as fast as possible and shows a progress bar (Stop cancels it). A raw capture has no per-read timestamps, so replay can't reproduce the original timing, TTFF or stale intervals: ages describe the decode pass. An empty capture, or one without NAV-PVT/GGA/RMC, is reported explicitly. The synthetic demo emits generated frames once a second, optionally with a fault. Both are labelled in a banner so they are never mistaken for live hardware.
+A replay decodes the capture as fast as possible and shows a progress bar (Stop cancels it). A raw capture has no per-read timestamps, so replay can't reproduce the original timing, TTFF or stale intervals: ages describe the decode pass. An empty capture, or one without NAV-PVT/GGA/RMC, is reported explicitly. The synthetic demo emits generated frames once a second, optionally with a fault. Its GNSS time follows this computer's clock, so the clock check reads *in step* unless you choose a clock fault. Both are labelled in a banner so they are never mistaken for live hardware.
 
 ## Ending a session
 

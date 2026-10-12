@@ -8,8 +8,9 @@ import shutil
 
 from gi.repository import Adw, Gio, GLib, Gtk, Pango
 
-from .. import hostinfo
+from .. import clock, hostinfo
 from ..serialize import json_line, safe
+from . import format as fmt
 from .pages import ColumnPage, SessionPage, copy_button, copy_text
 
 COMMAND_TITLES = {"lsusb": "USB devices (lsusb)", "udev": "udev properties", "owners": "Port owners (fuser)",
@@ -79,6 +80,20 @@ def set_check(row, ok, text):
     row.set_subtitle(safe(text))
 
 
+LEVELS = {"ok": ("object-select-symbolic", "success"), "warning": ("dialog-warning-symbolic", "warning"),
+          "error": ("dialog-error-symbolic", "error"), None: ("dialog-information-symbolic", "dim-label")}
+
+
+def set_level(row, level, text):
+    """Like set_check, with red for a problem that needs fixing: level is 'ok', 'warning', 'error' or None."""
+    icon, style = LEVELS[level]
+    for css in ("success", "warning", "error", "dim-label"):
+        row.icon.remove_css_class(css)
+    row.icon.set_from_icon_name(icon)
+    row.icon.add_css_class(style)
+    row.set_subtitle(safe(text))
+
+
 class HostPage(SessionPage):
     def __init__(self, page):
         super().__init__(page)
@@ -107,6 +122,16 @@ class HostPage(SessionPage):
                            ("modemmanager", "ModemManager")):
             self.checks[key] = check_row(title)
             self.summary.add(self.checks[key])
+
+        self.clock_group = Adw.PreferencesGroup(
+            title="System Clock",
+            description="This computer's clock compared with GNSS time from the receiver. Read-only: the "
+                        "application never changes the clock.")
+        self.clock_row = check_row("System clock")
+        self.clock_basis = check_row("Compared with")
+        for row in (self.clock_row, self.clock_basis):
+            self.clock_group.add(row)
+        self.show_clock(None)
 
         self.fix = Adw.PreferencesGroup(
             title="Grant Access",
@@ -137,11 +162,24 @@ class HostPage(SessionPage):
             self.outputs.add(row)
         hints = Adw.PreferencesGroup(title="Hints", description="\n".join(hostinfo.HINTS))
         page = self.columns = ColumnPage()
-        page.add_flow([self.summary, self.fix, self.devices, self.outputs, hints])
+        page.add_flow([self.summary, self.clock_group, self.fix, self.devices, self.outputs, hints])
         return page
 
     def update(self, snapshot):
-        self.snapshot = snapshot  # Host checks are independent of session data.
+        self.snapshot = snapshot  # Host checks are independent of session data; the clock is not.
+        self.show_clock(snapshot)
+
+    def show_clock(self, snapshot):
+        config = getattr(self, "config", None)
+        if snapshot is None or config is None:
+            set_level(self.clock_row, None, "Start a session to compare it with GNSS time")
+            set_level(self.clock_basis, None, fmt.host_clock_basis(None))
+            return
+        value = snapshot.get("host_clock")
+        text, level = fmt.host_clock(value, config.source != "replay")
+        set_level(self.clock_row, level, text + (f". {clock.HINT}" if level == "error" else ""))
+        set_level(self.clock_basis, None, fmt.host_clock_basis(value) if config.source != "replay"
+                  else "A replay's GNSS times are from when it was recorded")
 
     def do_map(self):
         SessionPage.do_map(self)
