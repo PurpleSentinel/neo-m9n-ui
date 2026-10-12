@@ -12,6 +12,7 @@ import cairo
 from gi.repository import Adw, Gtk, Pango, PangoCairo
 
 from . import format as fmt
+from .appearance import night_button
 from .pages import SessionPage
 
 HEADING_MIN_M_S = 1.0  # GNSS course over ground is noise below about walking pace.
@@ -402,7 +403,7 @@ class VehiclePage(SessionPage):
         toolbar = Gtk.Box(spacing=8)
         toolbar.append(self.status)
         toolbar.append(Gtk.Box(hexpand=True))
-        for widget in (units, reset, self.fullscreen_button):
+        for widget in (units, reset, night_button(), self.fullscreen_button):
             toolbar.append(widget)
 
         self.speed = SpeedGauge()

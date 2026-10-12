@@ -20,6 +20,7 @@ from gi.repository import Adw, Gio, GLib, Gtk, Pango
 from ..mbtiles import MapFile, MapFileError
 from . import format as fmt
 from .pages import SessionPage
+from .appearance import night_button
 from .vehicle import HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text
 
 try:
@@ -295,6 +296,8 @@ class MapPage(SessionPage):
         self.indicator_label = Gtk.Label(label="Online: OpenStreetMap")
         self.indicator.append(self.indicator_label)
         self.indicator.add_css_class("accent")
+        self.indicator.set_tooltip_text("Map squares are downloaded from OpenStreetMap as it draws them, "
+                                        "so they stay light in night mode.")
         self.indicator.update_property([Gtk.AccessibleProperty.LABEL], ["Map is online: OpenStreetMap"])
 
         self.storage = Gtk.MenuButton(icon_name="drive-harddisk-symbolic", tooltip_text="Map storage",
@@ -309,6 +312,7 @@ class MapPage(SessionPage):
         toolbar.append(self.indicator)
         toolbar.append(Gtk.Box(hexpand=True))
         toolbar.append(self.storage)
+        toolbar.append(night_button())
         toolbar.append(self.fullscreen_button)
 
         self.overlay_area = MapOverlay(self)
@@ -352,6 +356,8 @@ class MapPage(SessionPage):
         compact.add_setter(self.indicator_label, "visible", False)  # The icon alone still shows the mode.
         compact.add_setter(self.fullscreen_button, "visible", False)  # F11 still works; phones rarely need it.
         compact.add_setter(self.toolbar, "spacing", 4)
+        for side in ("margin-start", "margin-end"):
+            compact.add_setter(self.toolbar, side, 6)  # Room for night mode beside the online indicator.
         self.adaptive.add_breakpoint(compact)
         return self.adaptive
 

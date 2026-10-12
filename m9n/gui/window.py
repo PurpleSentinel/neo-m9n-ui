@@ -7,6 +7,7 @@ from gi.repository import Adw, Gio, GLib, GObject, Gtk
 from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
 from ..serialize import safe
 from ..settings import SessionSettings
+from .appearance import Appearance
 from .dashboard import DashboardPage
 from .host import HostPage
 from .messages import MessagesPage
@@ -50,6 +51,7 @@ class MainWindow(Adw.ApplicationWindow):
                                          tooltip_text="Start or stop the session (F5)")
         self.session_button.add_css_class("suggested-action")
         menu = Gio.Menu()
+        menu.append_submenu("Appearance", Appearance.menu())
         menu.append("Keyboard Shortcuts", "app.shortcuts")
         menu.append("About NEO-M9N Monitor", "app.about")
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, primary=True,
@@ -60,6 +62,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.setup = SetupPanel(settings)
         self.setup.connect("changed", self.on_setup_changed)
         self._save_source = 0
+        self.appearance = Appearance(self, settings.appearance, self.on_appearance_changed)
 
         self.switcher = switcher = Adw.ViewSwitcher(stack=self.stack, policy=Adw.ViewSwitcherPolicy.WIDE)
         header = Adw.HeaderBar(title_widget=switcher)
@@ -194,6 +197,10 @@ class MainWindow(Adw.ApplicationWindow):
         self.setup.settings.units = units
         self.on_setup_changed(self.setup)
 
+    def on_appearance_changed(self, mode):
+        self.setup.settings.appearance = mode
+        self.on_setup_changed(self.setup)
+
     def on_page_shown(self):
         visible = self.stack.get_visible_child_name()
         self.pages["map"].set_page_visible(visible == "map")
@@ -239,6 +246,7 @@ class MainWindow(Adw.ApplicationWindow):
     def on_snapshot(self, _runner, snapshot):
         for page in self.pages.values():
             page.update(snapshot)
+        self.appearance.update(snapshot)
 
     def on_issue(self, _runner, kind, text):
         # One toast per issue at a time; a resolved issue withdraws its toast.

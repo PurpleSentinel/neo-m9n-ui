@@ -14,6 +14,7 @@ from .controller import FAULTS, OUTPUT_FIELDS, SessionConfig, problems
 
 SOURCES = ("device", "demo", "replay")
 BAUD_RATES = (9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600)
+APPEARANCES = ("system", "light", "dark", "sun")
 OUTPUT_SUFFIX = {"raw_log": ".ubx", "json_log": ".jsonl", "log_file": ".log", "report": "-report.json"}
 OUTPUT_LABEL = {"raw_log": "Raw RX capture", "json_log": "JSONL snapshot log",
                 "log_file": "Application log", "report": "Test report"}
@@ -49,6 +50,7 @@ class SessionSettings:
     map_consented: bool = False  # The user accepted the online map privacy notice.
     map_cache_mb: int = 200  # Online tile cache limit.
     map_offline_file: str = ""  # Offline map file (MBTiles) for the "offline" map mode.
+    appearance: str = "system"  # "system", "light", "dark" or "sun" (dark after civil dusk at the receiver).
 
     @property
     def effective_mode(self):
@@ -151,6 +153,8 @@ class SessionSettings:
             settings.mode = cls.mode
         if settings.units not in ("metric", "imperial"):
             settings.units = cls.units
+        if settings.appearance not in APPEARANCES:
+            settings.appearance = cls.appearance
         if (settings.map_mode not in ("off", "online", "offline")
                 or (settings.map_mode == "online" and not settings.map_consented)
                 or (settings.map_mode == "offline" and not settings.map_offline_file)):

@@ -69,6 +69,23 @@ class SunTests(unittest.TestCase):
         self.assertEqual([sun.phase(e) for e in (10, -0.5, -3, -9, -15, -30)],
                          ["day", "day", "civil twilight", "nautical twilight", "astronomical twilight", "night"])
 
+    def test_dark_by_sun_switches_at_civil_dusk_without_flicker(self):
+        night = sun.DarkBySun()
+        self.assertIsNone(night.dark)
+        self.assertFalse(night.update(-5.9))  # First reading: plain threshold at -6°.
+        self.assertFalse(night.update(-6.3))  # Within the hysteresis band: no change.
+        self.assertTrue(night.update(-6.6))
+        self.assertTrue(night.update(-5.7))  # Back up a little: still dark.
+        self.assertFalse(night.update(-5.4))
+        self.assertTrue(sun.DarkBySun().update(-6.1))
+        # A dusk sequence of noisy readings switches exactly once.
+        night, switches = sun.DarkBySun(), 0
+        last = night.update(-4.0)
+        for elevation in (-5.6, -6.2, -5.8, -6.4, -6.1, -6.6, -6.3, -6.7, -7.5):
+            switches += night.update(elevation) != last
+            last = night.dark
+        self.assertEqual((switches, night.dark), (1, True))
+
     def test_gnss_datetime(self):
         pvt = {"utc": "2026-10-11T12:00:05Z", "utc_valid": True}
         self.assertEqual(sun.gnss_datetime(pvt), datetime(2026, 10, 11, 12, 0, 5, tzinfo=UTC))
