@@ -40,8 +40,8 @@ def segments(points):
     return result
 
 
-def to_bytes(points, creator, receiver=None, name=None, now=None):
-    """The GPX document for a track's points (see trip.Track), as UTF-8 bytes."""
+def to_bytes(points, creator, receiver=None, name=None, now=None, marks=()):
+    """The GPX document for a track's points (see trip.Track) and marks (trip.Marks), as UTF-8 bytes."""
     ET.register_namespace("", GPX_NS)
     ET.register_namespace("gpxtpx", TPX_NS)
     root = ET.Element(f"{{{GPX_NS}}}gpx", {"version": "1.1", "creator": creator,
@@ -52,6 +52,15 @@ def to_bytes(points, creator, receiver=None, name=None, now=None):
     _sub(metadata, "name", name)
     _sub(metadata, "desc", f"Recorded by {creator}" + (f" from a u-blox {receiver} receiver" if receiver else ""))
     _sub(metadata, "time", (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%SZ"))
+    for mark in marks:  # Waypoints come before the track in GPX 1.1.
+        wpt = _sub(root, "wpt", lat=f"{mark['lat']:.7f}", lon=f"{mark['lon']:.7f}")
+        if mark.get("alt") is not None:
+            _sub(wpt, "ele", f"{mark['alt']:.2f}")
+        if mark.get("utc"):
+            _sub(wpt, "time", mark["utc"])
+        _sub(wpt, "name", f"Mark {mark['number']}")
+        if mark.get("note"):
+            _sub(wpt, "desc", mark["note"])
     track = _sub(root, "trk")
     _sub(track, "name", name)
     for segment in segments(points):

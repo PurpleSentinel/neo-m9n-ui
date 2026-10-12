@@ -151,7 +151,7 @@ class State:
                 "rejected_polls": sorted(self.rejected),
                 "message_ages_s": {k: round(now - v, 3) for k, v in self.seen.items()},
                 "issues": self.issues(now, framer), "recent_messages": list(self.recent),
-                "trip": self.trip.summary(), "host_clock": self.clock.result(time.time())}
+                "trip": self.trip.summary(), "marks": self.trip.marks.copy(), "host_clock": self.clock.result(time.time())}
 
     def issues(self, now, framer):
         issues = []

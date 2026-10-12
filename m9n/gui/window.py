@@ -4,7 +4,7 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
-from gi.repository import Adw, Gio, GLib, GObject, Gtk
+from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
 from .. import __version__, gpx
 from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
@@ -21,7 +21,7 @@ from .runner import SessionRunner
 from .setup import SetupPanel
 from .testpage import TestPage
 from .mappage import MapPage
-from .vehicle import EXPORT_TOOLTIP, NO_TRACK_TOOLTIP, VehiclePage
+from .vehicle import EXPORT_TOOLTIP, MARK_TOOLTIP, NO_FIX_TOOLTIP, NO_TRACK_TOOLTIP, VehiclePage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
@@ -128,6 +128,14 @@ class MainWindow(Adw.ApplicationWindow):
         self.export_action.connect("activate", lambda *_: self.export_track())
         self.export_action.set_enabled(False)
         self.add_action(self.export_action)
+        self.mark_action = Gio.SimpleAction.new("mark", None)
+        self.mark_action.connect("activate", lambda *_: self.add_mark())
+        self.mark_action.set_enabled(False)
+        self.add_action(self.mark_action)
+        # M marks the position. Bubble phase: a text field with focus (a note, a search) gets the key first.
+        keys = Gtk.EventControllerKey(propagation_phase=Gtk.PropagationPhase.BUBBLE)
+        keys.connect("key-pressed", self.on_key_pressed)
+        self.add_controller(keys)
         fullscreen = Gio.SimpleAction.new("fullscreen", None)
         fullscreen.connect("activate", lambda *_: self.unfullscreen() if self.is_fullscreen() else self.fullscreen())
         self.add_action(fullscreen)
@@ -218,11 +226,66 @@ class MainWindow(Adw.ApplicationWindow):
         if not self.runner.running:
             self.toast("Start a session to record a trip")
             return
+        had_marks = bool(self.runner.marks())
         self.runner.reset_trip()
         for page in self.pages.values():
             if hasattr(page, "trip_reset"):
                 page.trip_reset()
-        self.toast("Trip reset")
+        self.toast("Trip reset: track and marks cleared" if had_marks else "Trip reset")
+
+    # Marks ---------------------------------------------------------------
+
+    def on_key_pressed(self, _controller, keyval, _keycode, state):
+        modifiers = state & (Gdk.ModifierType.CONTROL_MASK | Gdk.ModifierType.ALT_MASK | Gdk.ModifierType.SUPER_MASK)
+        if keyval in (Gdk.KEY_m, Gdk.KEY_M) and not modifiers and not isinstance(self.get_focus(), Gtk.Editable):
+            if self.mark_action.get_enabled():
+                self.mark_action.activate(None)
+            else:
+                self.toast("Needs a position fix")
+            return True
+        return False
+
+    def set_mark_available(self, available):
+        if available == self.mark_action.get_enabled():
+            return
+        self.mark_action.set_enabled(available)
+        for key in ("vehicle", "map"):
+            self.pages[key].mark_button.set_tooltip_text(MARK_TOOLTIP if available else NO_FIX_TOOLTIP)
+
+    def refresh_marks(self):
+        self.pages["map"].set_marks(self.runner.marks())
+
+    def add_mark(self):
+        """Record the current position as the next numbered mark, with Undo."""
+        mark = self.runner.mark("add_mark")
+        if mark is None:
+            self.set_mark_available(False)
+            self.toast("Needs a position fix")
+            return None
+        self.refresh_marks()
+        number = mark["number"]
+        toast = self.toast(f"Mark {number} saved", timeout=5)
+        toast.set_button_label("Undo")
+        toast.connect("button-clicked", lambda *_: self.undo_mark(number))
+        return mark
+
+    def undo_mark(self, number):
+        if self.runner.mark("undo_mark", number):
+            self.refresh_marks()
+            self.toast(f"Mark {number} removed")
+
+    def delete_mark(self, number):
+        mark = self.runner.mark("delete_mark", number)
+        if mark is None:
+            return
+        self.refresh_marks()
+        toast = self.toast(f"Mark {number} deleted", timeout=5)
+        toast.set_button_label("Undo")
+        toast.connect("button-clicked", lambda *_: (self.runner.mark("restore_mark", mark), self.refresh_marks()))
+
+    def set_mark_note(self, number, note):
+        self.runner.mark("set_mark_note", number, note)
+        self.refresh_marks()
 
     # Track export --------------------------------------------------------
 
@@ -264,7 +327,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def write_track(self, path, points):
         identity = (self.pages["dashboard"].snapshot or {}).get("identity")
-        data = gpx.to_bytes(points, f"NEO-M9N Monitor {__version__}", gpx.receiver_model(identity))
+        data = gpx.to_bytes(points, f"NEO-M9N Monitor {__version__}", gpx.receiver_model(identity),
+                            marks=self.runner.marks())
         path = Path(path)
         partial = path.with_name(path.name + ".partial")
         try:
@@ -274,7 +338,9 @@ class MainWindow(Adw.ApplicationWindow):
             partial.unlink(missing_ok=True)
             self.alert("Track Not Exported", str(exc))
             return False
-        toast = self.toast(f"Track saved: {len(points):,} points", timeout=6)
+        marks = len(self.runner.marks())
+        toast = self.toast(f"Track saved: {len(points):,} points" + (f", {marks} mark{'s' * (marks != 1)}" if marks else ""),
+                           timeout=6)
         toast.set_button_label("Open Folder")
         toast.connect("button-clicked", lambda *_: Gtk.FileLauncher.new(Gio.File.new_for_path(str(path)))
                       .open_containing_folder(self, None, None))
@@ -310,6 +376,7 @@ class MainWindow(Adw.ApplicationWindow):
         for page in self.pages.values():
             page.update(snapshot)
         self.set_track_available(bool((snapshot.get("trip") or {}).get("epochs")))
+        self.set_mark_available(self.runner.can_mark())
         self.appearance.update(snapshot)
 
     def on_issue(self, _runner, kind, text):
@@ -324,6 +391,7 @@ class MainWindow(Adw.ApplicationWindow):
         for page in self.pages.values():
             page.session_started(runner.config)
         self.set_track_available(False)  # Each session starts a new trip.
+        self.set_mark_available(False)
         self.setup.set_sensitive(False)
         self.toggle_action.set_enabled(True)
         self.run_test_action.set_enabled(False)
@@ -342,6 +410,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.update_idle_inhibit()
 
     def on_finished(self, runner, result):
+        self.set_mark_available(False)  # Marks stay listed and exportable; new ones need a session.
         for page in self.pages.values():
             page.session_finished(result)
         for toast in self._issue_toasts.values():

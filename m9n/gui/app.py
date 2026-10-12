@@ -19,7 +19,8 @@ APP_ID = "io.github.PurpleSentinel.NeoM9N"
 APP_NAME = "NEO-M9N Monitor"
 DATA = Path(__file__).resolve().parent / "data"
 SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Run a device test", "<Control>t"),
-                          ("Show or hide session setup", "F9"), ("Export the track as GPX", "<Control>e")]),
+                          ("Show or hide session setup", "F9"), ("Export the track as GPX", "<Control>e"),
+                          ("Mark the position", "m")]),
              ("General", [("Fullscreen", "F11"), ("Keyboard shortcuts", "<Control>question"),
                           ("Quit", "<Control>q")])]
 

@@ -116,6 +116,19 @@ def export_button():
     return button
 
 
+MARK_TOOLTIP = "Mark this position (M)"
+NO_FIX_TOOLTIP = "Needs a position fix"
+
+
+def mark_button():
+    """Mark: records the current position as a numbered point (the window's win.mark action)."""
+    button = Gtk.Button(child=Adw.ButtonContent(icon_name="bookmark-new-symbolic", label="Mark"),
+                        action_name="win.mark", valign=Gtk.Align.CENTER, tooltip_text=NO_FIX_TOOLTIP)
+    button.add_css_class("suggested-action")
+    button.update_property([Gtk.AccessibleProperty.LABEL], ["Mark this position"])
+    return button
+
+
 class Instrument(Gtk.DrawingArea):
     """A drawn instrument that fills whatever space the page gives it."""
 
@@ -406,17 +419,19 @@ class VehiclePage(SessionPage):
             units.append(button)
         self.metric.connect("toggled", self.on_units_toggled)
         reset_content = Adw.ButtonContent(icon_name="edit-undo-symbolic", label="Reset Trip")
-        reset = Gtk.Button(child=reset_content, valign=Gtk.Align.CENTER, tooltip_text="Start distance and speeds again")
+        reset = Gtk.Button(child=reset_content, valign=Gtk.Align.CENTER,
+                           tooltip_text="Start distance and speeds again; clears the track and marks")
         reset.update_property([Gtk.AccessibleProperty.LABEL], ["Reset trip"])
         reset.connect("clicked", self.reset_trip)
         self.fullscreen_button = Gtk.Button(icon_name="view-fullscreen-symbolic", action_name="win.fullscreen",
                                             valign=Gtk.Align.CENTER, tooltip_text="Fullscreen (F11)")
         self.fullscreen_button.update_property([Gtk.AccessibleProperty.LABEL], ["Toggle fullscreen"])
-        toolbar = Gtk.Box(spacing=8)
+        toolbar = self.toolbar = Gtk.Box(spacing=8)
         toolbar.append(self.status)
         toolbar.append(Gtk.Box(hexpand=True))
         self.export_button = export_button()
-        for widget in (units, reset, self.export_button, night_button(), self.fullscreen_button):
+        self.mark_button = mark_button()
+        for widget in (self.mark_button, units, reset, self.export_button, night_button(), self.fullscreen_button):
             toolbar.append(widget)
 
         self.speed = SpeedGauge()
@@ -438,8 +453,8 @@ class VehiclePage(SessionPage):
             self.tile_box.append(tile)
             tile.get_parent().set_focusable(False)  # Tiles are read-only; keep Tab for the controls.
 
-        content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12, margin_bottom=12,
-                          margin_start=12, margin_end=12)
+        content = self.content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin_top=12,
+                                         margin_bottom=12, margin_start=12, margin_end=12)
         content.append(toolbar)
         content.append(self.main)
         content.append(self.tile_box)
@@ -459,6 +474,12 @@ class VehiclePage(SessionPage):
             breakpoint.add_setter(self.main, "homogeneous", False)
             if condition == COMPACT:  # Phone width: the reset button keeps only its icon.
                 breakpoint.add_setter(reset_content, "label", "")
+                breakpoint.add_setter(self.mark_button.get_child(), "label", "")
+                breakpoint.add_setter(self.toolbar, "spacing", 4)
+                for button in (self.metric, self.imperial):
+                    breakpoint.add_setter(button, "width-request", -1)
+                for side in ("margin-start", "margin-end"):
+                    breakpoint.add_setter(self.content, side, 6)  # Room for Mark beside the other controls.
                 breakpoint.add_setter(self.fullscreen_button, "visible", False)  # F11 still works.
             self.adaptive.add_breakpoint(breakpoint)
         return self.adaptive
