@@ -18,6 +18,7 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `settings.py` | Persisted session settings (`~/.config/neo-m9n/settings.json`), timestamped evidence names, per-setting validation problems |
 | `tilecache.py` | Online map tile cache following the OpenStreetMap tile policy: caching headers, a 7-day minimum, conditional revalidation, LRU size limit, atomic writes; never an offline map |
 | `mbtiles.py` | Read-only offline map files: MBTiles with OpenMapTiles vector tiles; validation with user-facing reasons, metadata, coverage, TMS row flip, gzip, a small tile cache |
+| `sun.py` | Sunrise, sunset, civil twilight and sun elevation for a position (NOAA solar algorithm, no network); the fix's GNSS UTC from NAV-PVT or NMEA RMC |
 | `trip.py` | Trip distance (haversine between valid, fresh epochs, timed by GNSS time), moving time and speeds, with stationary-jitter and glitch rejection |
 | `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests, including a moving-vehicle loop |
 

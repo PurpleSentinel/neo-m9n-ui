@@ -45,6 +45,11 @@ Invalid settings are marked on their row, the reason is shown under the form and
 The current fix in large type: **Valid Fix**, **Stale Navigation**, **No Fix** or **Waiting for Navigation**, always with an icon and text rather than colour alone. Below it:
 - **Active issues** (also shown briefly as notifications when they appear)
 - position, motion, dilution of precision, time
+- **Sun:** today's sunrise, sunset, day length and civil twilight (dawn to dusk) at the receiver's position, and the sun's elevation now
+  - **Time zone:** times are shown in the computer's time zone, e.g. *07:38 BST*.
+  - **Date:** they use the receiver's GNSS date, falling back to the computer's clock only if the receiver hasn't given one. The group's description says which is in use.
+  - **Polar regions:** these show *Sun up all day* or *Sun down all day*.
+  - **No network:** the times are calculated in the app, accurate to about a minute.
 - receiver identity (MON-VER), session details and stream counters
 
 Values the receiver hasn't provided read *unknown*; they are never guessed. Copy the coordinates, or the whole snapshot as JSON, with the copy buttons.

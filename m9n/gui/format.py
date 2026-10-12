@@ -1,4 +1,6 @@
 """Text for displayed values. GTK-free; missing values are always "unknown", never blank."""
+from datetime import timedelta
+
 UNKNOWN = "unknown"
 
 
@@ -110,3 +112,27 @@ def duration(value_s):
     hours, rest = divmod(total, 3600)
     minutes, seconds = divmod(rest, 60)
     return f"{hours}:{minutes:02d}:{seconds:02d}" if hours else f"{minutes}:{seconds:02d}"
+
+
+# Sun (Dashboard) ---------------------------------------------------------------
+
+POLAR = {"day": "Sun up all day", "night": "Sun down all day"}
+
+
+def local_time(when):
+    """A UTC datetime as a time in the computer's time zone, e.g. 07:38 BST."""
+    return (when + timedelta(seconds=30)).astimezone().strftime("%H:%M %Z").strip()  # Nearest minute.
+
+
+def day_length(value):
+    minutes = round(value.total_seconds() / 60)
+    return f"{minutes // 60} h {minutes % 60:02d} min"
+
+
+def sun_elevation(degrees, phase):
+    text = f"{degrees:+.0f}°".replace("-", "−")
+    return text if phase == "day" else f"{text} ({phase})"
+
+
+def sun_event(when, polar):
+    return local_time(when) if when else POLAR.get(polar, "None today")
