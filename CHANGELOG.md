@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 (2026-10-12)
+
+The Dashboard shows sunrise, sunset and the sun's elevation for where the receiver is.
 
 ### Added
 - **Sun** on the Dashboard (#60): sunrise, sunset, day length, civil twilight and the sun's elevation now, for the receiver's position.
