@@ -23,7 +23,10 @@ FORMATTER = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
 
 SOURCES = ("device", "demo", "replay")
 MODES = ("watch", "test")
-FAULTS = ("no-fix", "rf", "corrupt", "frozen", "silent", "drive")  # "drive" is motion, not a fault.
+FAULTS = ("no-fix", "rf", "corrupt", "frozen", "silent", "drive",  # "drive" is motion, not a fault.
+          "clock-fast", "clock-slow")
+DEMO_CLOCK_SKEW_S = {"clock-fast": 42.0, "clock-slow": -1.5}  # How far ahead of GNSS time the computer seems.
+DEMO_UTC = None  # Tests and screenshots: a fixed start (datetime) for the demo's GNSS time, not the computer's clock.
 
 COMPLETED = "completed"
 USER_STOPPED = "user_stopped"
@@ -139,9 +142,10 @@ def validate(config):
 
 class SessionController:
     def __init__(self, config, clock=time.monotonic, on_snapshot=None, on_issue=None, on_finished=None,
-                 on_stopping=None, on_message=None):
+                 on_stopping=None, on_message=None, wall_clock=time.time):
         self.config = config
         self.clock = clock
+        self.wall_clock = wall_clock  # The computer's UTC clock, compared with GNSS time.
         self.on_stopping = on_stopping
         self.on_message = on_message
         self.on_snapshot = on_snapshot
@@ -163,6 +167,7 @@ class SessionController:
         self._jsonl = None
         self._log_handler = None
         self._next_display = self._next_demo = None
+        self._demo_utc = None
 
     @property
     def running(self):
@@ -185,6 +190,8 @@ class SessionController:
             raise
         self.started = self.clock()
         self._next_display = self._next_demo = self.started
+        self._demo_utc = (DEMO_UTC.timestamp() if DEMO_UTC else
+                          self.wall_clock() - DEMO_CLOCK_SKEW_S.get(config.fault, 0.0))
         self.session = Session(self.started, config.stale_after, config.passive or self.port is None, self.source)
         self.session.state.on_recent = self.on_message
         self.state = "running"
@@ -278,7 +285,8 @@ class SessionController:
         elif now >= self._next_demo:
             epoch = 1000 if config.fault == "frozen" else 1000 + int((now - self.started) * 1000)
             self._next_demo = now + 1
-            if not self._ingest(b"" if config.fault == "silent" else sample(epoch, config.fault), now):
+            utc = self._demo_utc + (epoch - 1000) / 1000
+            if not self._ingest(b"" if config.fault == "silent" else sample(epoch, config.fault, utc), now):
                 return
         self._track_issues(now)
         if config.source != "replay" and now >= self._next_display:
@@ -296,7 +304,8 @@ class SessionController:
             except OSError as exc:
                 self._output_failed("raw capture", exc, now)
         self.received_bytes |= bool(data)
-        self.session.consume(data, now)
+        # A replay's GNSS times are from when it was recorded: no clock comparison.
+        self.session.consume(data, now, None if self.config.source == "replay" else self.wall_clock())
         return self.running
 
     def _track_issues(self, now):

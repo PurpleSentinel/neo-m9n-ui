@@ -20,7 +20,18 @@ Start with the **Host** page, then a 120-second outdoor **device test**. If the 
 | Antenna OPEN/SHORT | Supervisor wiring/config or actual connection fault | Match exact SparkFun board schematic and antenna type; not all passive antennas support supervision |
 | RF state 2/3 | Receiver reports interference warning/critical | Move antenna from noise sources; compare C/N0 and location; state is an indication |
 | Spoof detector 2/3 | Receiver indication at that epoch | Verify position independently; detector state 0/1 does not prove absence of spoofing |
+| System clock amber or red (Host page) | No time synchronisation: an offline vehicle PC, NTP off, a flat RTC battery | See [Fixing a wrong clock](#fixing-a-wrong-clock); evidence timestamps from this session use the wrong time |
 | Disconnect/I/O error | Unplug, flaky cable/hub, power interruption | The window shows a disconnect banner; check kernel logs and the re-enumerated tty; start a new session (no automatic reconnect) |
+
+## Fixing a wrong clock
+
+The app only reads the clock; it never changes it. To fix it:
+
+1. **Settings → System → Date & Time:** turn on *Automatic Date & Time* (needs a network).
+2. **In a terminal:** `timedatectl` should show `System clock synchronized: yes` and `NTP service: active`. If not, run `sudo timedatectl set-ntp true`, then `chronyc tracking` to see chronyd's offset.
+3. **Offline machines:** the clock drifts, and a flat RTC battery resets it at every boot. chronyd can use the receiver as a time source through gpsd (a GNSS fix is accurate to well under a second; the PPS pin, where wired, to microseconds). That setup is outside this app, and gpsd would then hold the port, so stop it before a session.
+
+A reading within ±0.2 s is *in step*: the comparison includes a little USB delay, so it can't resolve milliseconds.
 
 ## A useful evidence bundle
 

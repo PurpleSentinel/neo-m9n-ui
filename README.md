@@ -51,7 +51,7 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 | Vehicle | For use on the move: a speed gauge, a compass showing the course over ground, distance travelled, average and maximum speed, moving time and an altitude profile, in large colourful instruments that scale to the window; km/h or mph; one-tap night mode; export the track as GPX; fullscreen (F11) and the screen kept awake |
 | Messages | Receiver INF/TXT notices and parser errors for the whole session, and the application log (debug: RX/TX hex); filter, search, copy, save |
 | Test | Timed device test with progress and a PASS/WARN/FAIL/INTERRUPTED report you can save and copy |
-| Host | USB devices, access, `cdc_acm`, port owners, gpsd/ModemManager, udev properties; replaces `doctor`; save as JSON |
+| Host | USB devices, access, `cdc_acm`, port owners, gpsd/ModemManager, udev properties; replaces `doctor`; save as JSON. **System clock:** how far the computer's clock is from GNSS time |
 
 Evidence files (all optional, set in the sidebar): an exact **raw RX capture**, a **JSONL snapshot log** (snapshots plus the final test report), the **application log** and the **test report**. By default they get timestamped names in `Documents/NEO-M9N`; any of them can be pinned to a specific file. Raw captures are never overwritten. **Captures and logs contain your precise location and receiver identifiers**: inspect them before sharing; `captures/`, `reports/`, `*.ubx` and `*.jsonl` are gitignored.
 
@@ -87,7 +87,7 @@ The device test observes the receiver for 60 seconds by default and assesses the
 
 ![Device test result](docs/screenshots/test.png)
 
-A disconnect during a test produces a FAIL report with a `usb_transport` check. Receivers whose jamming monitor reports state 0 ("unknown or disabled") get **WARN** for RF health rather than PASS; the Receiver page explains this when it applies.
+A disconnect during a test produces a FAIL report with a `usb_transport` check. The `host_clock` check records how far the computer's clock was from GNSS time; it is informational and doesn't change the result. Receivers whose jamming monitor reports state 0 ("unknown or disabled") get **WARN** for RF health rather than PASS; the Receiver page explains this when it applies.
 
 **No fix is not proof of broken hardware.** Indoor reception, antenna placement, initial acquisition and receiver configuration can all prevent a fix. RF detector values are indications, not certification of interference or spoofing, and not proof of an antenna fault. An unavailable message is reported as unknown rather than healthy.
 
@@ -102,7 +102,7 @@ Closing the window while a session runs asks first. Suspend is inhibited while a
 
 ## Try without hardware
 
-Choose **Source: Synthetic demo** (optionally with a simulated fault: no fix, RF alarm, corrupt frames, frozen epochs, silent; or *Moving vehicle*, which drives a loop for the Vehicle page) or **Replay capture** with a saved raw file. Demo data is labelled SYNTHETIC DEMO and replays are labelled REPLAY. To exercise the real tty code path:
+Choose **Source: Synthetic demo** (optionally with a simulated fault: no fix, RF alarm, corrupt frames, frozen epochs, silent, a computer clock 42 s fast or 1.5 s slow; or *Moving vehicle*, which drives a loop for the Vehicle page) or **Replay capture** with a saved raw file. Demo data is labelled SYNTHETIC DEMO and replays are labelled REPLAY. To exercise the real tty code path:
 
 ```bash
 python3 scripts/simulate-device.py --fault no-fix

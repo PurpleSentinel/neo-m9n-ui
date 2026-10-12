@@ -267,6 +267,11 @@ def decode_nmea(sentence):
                      longitude=coordinate(f[5], f[6]) if valid else None,
                      speed_m_s=number(f[7]) * 0.514444 if valid and f[7] else None,
                      heading_deg=number(f[8]) if valid else None)
+    elif kind == "ZDA":
+        if len(f) < 5:
+            raise ValueError("Short ZDA")
+        event.update(kind="time", utc=f[1] or None, day=int(f[2]) if f[2] else None,
+                     month=int(f[3]) if f[3] else None, year=int(f[4]) if f[4] else None)
     elif kind == "GSA":
         if len(f) < 18:
             raise ValueError("Short GSA")

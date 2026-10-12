@@ -16,7 +16,7 @@ class Session:
         self.next_poll = {name: started for name, *_ in POLLS}
         self.unanswered = set()
 
-    def consume(self, data, now):
+    def consume(self, data, now, received=None):
         if data:
             LOG.debug("RX %d bytes: %s", len(data), data.hex(" "))
         for frame in self.framer.feed(data, now):
@@ -25,7 +25,7 @@ class Session:
             except (ValueError, IndexError) as exc:
                 self.state.decode_errors += 1
                 event = {"protocol": "ERROR", "name": "decode_error", "text": str(exc)}
-            self.state.ingest(event, now)
+            self.state.ingest(event, now, received)
             if event["name"] in self.unanswered:
                 self.unanswered.remove(event["name"])
                 LOG.info("%s response recovered", event["name"])

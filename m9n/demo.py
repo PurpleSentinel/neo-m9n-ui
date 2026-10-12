@@ -1,6 +1,7 @@
 """Synthetic UBX fixture generation. Never presented as actual hardware data."""
 import math
 import struct
+from datetime import datetime, timezone
 from .protocol import nmea, ubx
 
 ORIGIN = (54.1667070, -4.4503420)  # Latitude, longitude of the static demo fix.
@@ -22,9 +23,16 @@ def drive(seconds):
     return lat, lon, speed, (math.degrees(angle) + 90) % 360, 40 + 25 * math.sin(angle)
 
 
-def sample(epoch=1000, fault=None):
+def sample(epoch=1000, fault=None, utc=None):
+    """One epoch of synthetic output. utc: its GNSS time (POSIX seconds); None: 2026-10-11 12:00:ss."""
     p = bytearray(92)
-    struct.pack_into("<IHBBBBBB", p, 0, epoch, 2026, 10, 11, 12, 0, (epoch // 1000) % 60, 7)
+    if utc is None:
+        struct.pack_into("<IHBBBBBB", p, 0, epoch, 2026, 10, 11, 12, 0, (epoch // 1000) % 60, 7)
+    else:
+        whole = round(utc)
+        t = datetime.fromtimestamp(whole, timezone.utc)
+        struct.pack_into("<IHBBBBBB", p, 0, epoch, t.year, t.month, t.day, t.hour, t.minute, t.second, 7)
+        struct.pack_into("<Ii", p, 12, 30, round((utc - whole) * 1e9))  # tAcc 30 ns; signed nano.
     p[20:24] = bytes((0 if fault == "no-fix" else 3, 0 if fault == "no-fix" else 1, 0, 10))
     if fault == "drive":
         lat, lon, speed, heading, altitude = drive((epoch - 1000) / 1000)

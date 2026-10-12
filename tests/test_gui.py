@@ -521,6 +521,48 @@ class SatelliteTests(unittest.TestCase):
         self.assertIn("not evidence of a hardware fault", result["nodata_text"])
 
 
+class HostClockTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, fault=""):
+        process, result = run_probe(self.env, "host_clock", M9N_FAULT=fault)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_in_step(self):
+        result = self.probe()
+        self.assertEqual(result["before"], "Start a session to compare it with GNSS time")
+        self.assertEqual(result["host"]["text"], "in step (±0.2 s)")
+        self.assertEqual(result["host"]["style"], ["success"])
+        self.assertRegex(result["host"]["basis"], r"^Median of \d+ epochs? of NAV-PVT, ±0.2 s$")
+        self.assertEqual(result["receiver"], {"text": "in step (±0.2 s)", "style": ["success"]})
+        self.assertEqual(result["check"]["status"], "PASS")
+        self.assertEqual(result["test_row"], result["check"]["detail"])
+
+    def test_slow_clock_is_amber(self):
+        result = self.probe("clock-slow")
+        self.assertEqual((result["host"]["text"], result["host"]["style"]), ("1.5 s slow", ["warning"]))
+        self.assertEqual(result["receiver"], {"text": "1.5 s slow", "style": ["warning"]})
+        self.assertAlmostEqual(result["snapshot"]["offset_s"], -1.5, delta=0.05)
+
+    def test_fast_clock_is_red_with_a_hint_and_stays_informational(self):
+        result = self.probe("clock-fast")
+        self.assertEqual(result["host"]["style"], ["error"])
+        self.assertTrue(result["host"]["text"].startswith("42 s fast. Turn on automatic time"))
+        self.assertEqual(result["receiver"], {"text": "42 s fast", "style": ["error"]})
+        self.assertEqual(result["check"]["status"], "WARN")
+        self.assertIn("42 s fast", result["check"]["detail"])
+        self.assertEqual(result["report_status"], "PASS")  # The receiver is fine; the computer's clock is not.
+
+
 class ReceiverTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

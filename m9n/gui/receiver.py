@@ -6,6 +6,7 @@ from gi.repository import Adw, Gtk
 
 from ..state import (JAMMING, RF_FRESH_S, SPOOFING, antenna_alarm, jamming_alarm, rf_monitor_known,
                      spoofing_alarm)
+from .. import clock
 from . import format as fmt
 from .pages import ColumnPage, SessionPage, value_row
 
@@ -55,7 +56,9 @@ class ReceiverPage(SessionPage):
                                             ("MON-RF", "RF (MON-RF)")],
                    "Time since each message was last received. Missing data is not evidence of a hardware fault."),
              group("Polling", [("timeouts", "Unanswered polls"), ("rejected", "Rejected polls"),
-                               ("mode", "Mode")])])
+                               ("mode", "Mode")]),
+             group("Computer Clock", [("clock", "System clock")],
+                   "Compared with GNSS time; details on the Host page.")])
         return page
 
     def session_started(self, config):
@@ -81,6 +84,11 @@ class ReceiverPage(SessionPage):
         timeouts = snapshot["poll_timeouts"]
         self.set("timeouts", ", ".join(f"{name} ×{count}" for name, count in sorted(timeouts.items())) or "none")
         self.set("rejected", ", ".join(snapshot["rejected_polls"]) or "none")
+        text, level = fmt.host_clock(snapshot.get("host_clock"), self.config.source != "replay")
+        self.set("clock", text)
+        for css, on in (("success", level == "ok"), ("warning", level == "warning"), ("error", level == "error")):
+            (self.rows["clock"].value.add_css_class if on else self.rows["clock"].value.remove_css_class)(css)
+        self.rows["clock"].set_tooltip_text(clock.HINT if level == "error" else None)
         mark(self.rows["timeouts"], bool(timeouts))
         mark(self.rows["rejected"], bool(snapshot["rejected_polls"]))
 
