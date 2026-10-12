@@ -112,6 +112,15 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(result["clipboard"], "54.1667070, -4.4503420")
         self.assertEqual(result["sanitised"], ["EVIL?[2J?FW", "Bell? issue"])
 
+    def test_sun_times_for_the_fix(self):
+        # Demo fix: Isle of Man, 2026-10-11 12:00 GNSS UTC; times shown in the computer's time zone.
+        values = self.probe(TZ="Europe/London")["values"]
+        self.assertEqual([values[key] for key in ("sunrise", "sunset", "daylength", "twilight")],
+                         ["07:38 BST", "18:30 BST", "10 h 52 min", "07:03 BST – 19:05 BST"])
+        self.assertRegex(values["elevation"], r"^\+2[89]°$")
+        values = self.probe(TZ="UTC")["values"]
+        self.assertEqual([values["sunrise"], values["sunset"]], ["06:38 UTC", "17:30 UTC"])
+
     def test_frozen_epochs_show_stale_with_issue_toast(self):
         result = self.probe(M9N_FAULT="frozen", M9N_STALE="0.5", M9N_WAIT_MS="1800")
         self.assertEqual(result["fix_title"], "Stale Navigation")
@@ -122,6 +131,7 @@ class DashboardTests(unittest.TestCase):
         result = self.probe(M9N_FAULT="no-fix")
         self.assertEqual(result["fix_title"], "No Fix")
         self.assertEqual(result["values"]["latitude"], "unknown")
+        self.assertEqual(result["values"]["sunrise"], "Needs a position fix")
         self.assertIsNone(result["clipboard"])
 
 
@@ -364,7 +374,7 @@ class LayoutTests(unittest.TestCase):
             self.assertEqual(result[key]["columns"], 2, key)
             self.assertLess(result[key]["width"], 1000, key)  # The sidebar narrows the page itself.
         self.assertEqual(result["dashboard"]["bands"], ["horizontal"])  # Fix status beside Active Issues.
-        self.assertEqual(sum(result["dashboard"]["flow"]), 7)
+        self.assertEqual(sum(result["dashboard"]["flow"]), 8)
         self.assertEqual(result["satellites"]["orientation"], "vertical")  # Too narrow for table and sky side by side.
 
     def test_desktop_window_without_sidebar(self):
@@ -379,7 +389,7 @@ class LayoutTests(unittest.TestCase):
         for key in self.COLUMN_PAGES:
             self.assertEqual(result[key]["columns"], 1, key)
             self.assertTrue(all(band == "vertical" for band in result[key]["bands"]), key)
-        self.assertEqual(result["dashboard"]["flow"], [7])
+        self.assertEqual(result["dashboard"]["flow"], [8])
         self.assertEqual(result["satellites"]["orientation"], "vertical")
 
     def test_wide_page_uses_three_columns_and_a_larger_sky_plot(self):
@@ -387,7 +397,7 @@ class LayoutTests(unittest.TestCase):
         result = self.probe(M9N_TEXT_SCALE="0.5")
         for key in self.COLUMN_PAGES:
             self.assertEqual(result[key]["columns"], 3, key)
-        self.assertEqual(sum(result["dashboard"]["flow"]), 7)
+        self.assertEqual(sum(result["dashboard"]["flow"]), 8)
         self.assertGreater(result["satellites"]["sky"], 260)
 
 

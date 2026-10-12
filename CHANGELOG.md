@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Sun** on the Dashboard (#60): sunrise, sunset, day length, civil twilight and the sun's elevation now, for the receiver's position.
+  - **Time zone:** times are shown in the computer's time zone.
+  - **Date:** they use GNSS time, or the computer's clock if the receiver has no date.
+  - **Polar regions:** polar day and night are explained.
+  - **No network:** the times are calculated locally (NOAA solar algorithm). They are checked against an independent ephemeris to within a minute.
+
 ## 3.0.1 (2026-10-12)
 
 A small update to the offline map script.

@@ -44,7 +44,7 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 
 | Page | Detail |
 | --- | --- |
-| Dashboard | Fix status, position, altitude, accuracy, speed, course, DOP, GNSS UTC, sample and epoch-progress age, firmware identity, stream counters and active issues; copy coordinates or the snapshot as JSON |
+| Dashboard | Fix status, position, altitude, accuracy, speed, course, DOP, GNSS UTC, sample and epoch-progress age, sunrise, sunset and sun elevation, firmware identity, stream counters and active issues; copy coordinates or the snapshot as JSON |
 | Satellites | Every NAV-SAT satellite: constellation, SV, C/N0, elevation, azimuth, use in solution, signal quality, health; sortable; sky plot |
 | Receiver | MON-RF antenna/jamming/noise/AGC, NAV-STATUS TTFF/uptime/spoofing indication, diagnostic freshness, unanswered and rejected polls |
 | Map | Your live position, accuracy circle and the trip's track, following you: on a coordinate grid (default), on an **offline map file** made once at home (works with no internet), or on an OpenStreetMap map you opt into |

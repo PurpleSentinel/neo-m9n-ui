@@ -1,11 +1,16 @@
 """Live dashboard: fix status, position, motion, timing, identity, stream health and issues."""
+from datetime import datetime, timezone
+
 from gi.repository import Adw, Gtk
 
+from .. import sun
 from ..serialize import json_line, safe
+from ..trip import distance_m
 from . import format as fmt
 from .pages import ColumnPage, SessionPage, copy_button, copy_text, value_row
 
 # Fix state -> (style class, icon). The title text always accompanies the colour.
+SUN_MOVE_M = 10000  # Sun times are recalculated when the position moves this far, or each minute.
 FIX_STYLE = {"valid": ("success", "object-select-symbolic"), "stale": ("warning", "dialog-warning-symbolic"),
              "none": ("error", "dialog-error-symbolic"), "waiting": ("dim-label", "content-loading-symbolic")}
 
@@ -56,6 +61,7 @@ class DashboardPage(SessionPage):
                                                ("vdop", "Vertical (VDOP)")]),
              group_of("Time", [("utc", "GNSS UTC"), ("tacc", "Time accuracy"), ("message", "Navigation message"),
                                ("age", "Sample age"), ("progress", "Epoch progress age")]),
+             self.build_sun(group_of),
              group_of("Receiver Identity", [("software", "Firmware"), ("hardware", "Hardware"),
                                             ("extensions", "Extensions")]),
              group_of("Session", [("source", "Source"), ("elapsed", "Elapsed"), ("updated", "Updated (host UTC)")],
@@ -112,6 +118,7 @@ class DashboardPage(SessionPage):
             "decode": fmt.integer(snapshot["decode_errors"]),
             "timeouts": f"{timeouts:,}" + (f" ({', '.join(sorted(snapshot['poll_timeouts']))})" if timeouts else ""),
             "rejected": ", ".join(snapshot["rejected_polls"]) or "none",
+            **self.sun_values(nav),
         }
         for key, text in values.items():
             # Receiver strings are shown as plain text; safe() removes control characters.
@@ -127,6 +134,39 @@ class DashboardPage(SessionPage):
             if counter:
                 self.rows[key].value.add_css_class("warning")
         self.show_issues(snapshot["issues"])
+
+    def build_sun(self, group_of):
+        self.sun_key = None
+        self.sun_group = group_of("Sun", [("sunrise", "Sunrise"), ("sunset", "Sunset"), ("daylength", "Day length"),
+                                          ("twilight", "Civil twilight"), ("elevation", "Sun elevation now")])
+        return self.sun_group
+
+    def sun_values(self, nav):
+        """Sun rows for the fix's position and GNSS time (the computer's clock if the receiver has no date)."""
+        lat, lon = nav.get("latitude"), nav.get("longitude")
+        if lat is None or lon is None:
+            self.sun_key = None
+            self.sun_group.set_description(None)
+            return dict.fromkeys(("sunrise", "sunset", "daylength", "twilight", "elevation"), "Needs a position fix")
+        when = sun.gnss_datetime(nav)
+        clock = "GNSS time" if when else "the computer's clock"
+        when = when or datetime.now(timezone.utc)
+        minute = when.replace(second=0, microsecond=0)
+        if self.sun_key and self.sun_key[0] == minute and distance_m(lat, lon, *self.sun_key[1]) < SUN_MOVE_M:
+            return self.sun_key[2]
+        times = sun.day(when, lat, lon)
+        height = sun.elevation(when, lat, lon)
+        dawn, dusk = times["dawn"], times["dusk"]
+        values = {"sunrise": fmt.sun_event(times["sunrise"], times["polar"]),
+                  "sunset": fmt.sun_event(times["sunset"], times["polar"]),
+                  "daylength": fmt.day_length(times["day_length"]),
+                  "twilight": (f"{fmt.local_time(dawn)} – {fmt.local_time(dusk)}" if dawn and dusk
+                               else fmt.sun_event(dawn or dusk, times["polar"])),
+                  "elevation": fmt.sun_elevation(height, sun.phase(height))}
+        self.sun_group.set_description(f"For the receiver's position, using {clock}. "
+                                       f"Times in this computer's time zone.")
+        self.sun_key = (minute, (lat, lon), values)
+        return values
 
     def show_issues(self, issues):
         wanted = issues or ["No active issues"]
