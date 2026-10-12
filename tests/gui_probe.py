@@ -18,6 +18,7 @@ from gi.repository import Adw, GLib, Gtk  # noqa: E402
 from m9n import controller  # noqa: E402
 from m9n.controller import SessionConfig  # noqa: E402
 from m9n.gui.app import Application  # noqa: E402
+from m9n.gui.vehicle import STATUS  # noqa: E402
 
 SCENARIO = sys.argv[1]
 # Reproducible sun times: the demo's GNSS time starts at 2026-10-11 12:00 UTC, except where the clock is tested.
@@ -550,7 +551,10 @@ def vehicle(win):
         result["live"] = read()
         result["idle_inhibited"] = bool(win._idle_cookie)
         width = page.adaptive.get_width()
+        shown = page.status.get_label()
+        page.status.set_label(max((text for text, _ in STATUS.values()), key=len))  # The widest status.
         result["overflow"] = page.adaptive.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0] > width
+        page.status.set_label(shown)
         result["main_orientation"] = page.main.get_orientation().value_nick
         page.imperial.set_active(True)
         later(1200, units)
@@ -885,6 +889,88 @@ def track_export(win):
         result["toasts"] = list(toasts)
         win.runner.stop()
         result["after_stop"] = [action.get_enabled(), len(win.runner.track_points()) > 0]
+        later(100, app.quit)
+    later(2200, live)
+
+
+def marks(win):
+    """Mark: the M key during the demo drive, pins, the Marks list, delete and undo, notes, GPX, no fix."""
+    import tempfile
+    import xml.etree.ElementTree as ET
+    from gi.repository import Gdk
+    toasts = []
+    original = win.toast
+    win.toast = lambda text, timeout=3: toasts.append(text) or original(text, timeout)
+    fault = os.environ.get("M9N_FAULT") or "drive"
+    page, action = win.pages["map"], win.lookup_action("mark")
+    buttons = [win.pages["vehicle"].mark_button, page.mark_button]
+    win.show_page("map")
+    win.start_session(SessionConfig(source="demo", fault=fault))
+    result["at_start"] = [action.get_enabled(), buttons[0].get_tooltip_text()]
+
+    def press_m(focus=None):
+        real = win.get_focus
+        if focus is not None:
+            win.get_focus = lambda: focus
+        try:
+            return win.on_key_pressed(None, Gdk.KEY_m, 0, Gdk.ModifierType(0))
+        finally:
+            win.get_focus = real
+
+    def rows():
+        return [row.get_child() for row in iter_children(page.marks_list) if isinstance(row, Gtk.ListBoxRow)]
+
+    def live():
+        result["live"] = [action.get_enabled(), [b.get_tooltip_text() for b in buttons],
+                          [b.get_sensitive() for b in buttons]]
+        result["typing"] = [press_m(Gtk.Entry()), len(win.runner.marks())]  # M typed into a text field.
+        result["key"] = press_m()
+        if fault != "drive":
+            win.activate_action("win.mark", None)
+            result["marks"] = win.runner.marks()
+            return finish()
+        first = win.runner.marks()[0]
+        fix = page.fix
+        result["first"] = {"number": first["number"], "on_map": page.marks == win.runner.marks(),
+                           "at_fix": abs(first["lat"] - fix[0]) < 1e-6 and abs(first["lon"] - fix[1]) < 1e-6,
+                           "accuracy": first["accuracy_m"], "utc": bool(first["utc"])}
+        later(1100, second)
+
+    def second():
+        win.activate_action("win.mark", None)
+        win.activate_action("win.mark", None)
+        result["three"] = [m["number"] for m in win.runner.marks()]
+        win.undo_mark(3)  # The toast's Undo.
+        win.activate_action("win.mark", None)
+        result["after_undo"] = [m["number"] for m in win.runner.marks()]
+        page.marks_button.popup()
+        listed = rows()
+        result["listed"] = [r.get_first_child().get_first_child().get_first_child().get_label() for r in listed]
+        result["distinct_positions"] = len({(m["lat"], m["lon"]) for m in win.runner.marks()}) >= 2
+        listed[-1].note.set_text("  Parking   spot ")  # The oldest mark, at the bottom.
+        listed[-1].note.emit("activate")
+        page.delete_mark(2)
+        result["after_delete"] = [m["number"] for m in win.runner.marks()]
+        result["rows_after_delete"] = len(rows())
+        page.show_mark(1)
+        result["following_after_show"] = page.following
+        win.activate_action("win.mark", None)
+        result["after_delete_mark"] = [m["number"] for m in win.runner.marks()]
+        out = Path(tempfile.mkdtemp())
+        win.write_track(str(out / "trip.gpx"), win.runner.track_points())
+        ns = {"g": "http://www.topografix.com/GPX/1/1"}
+        root = ET.parse(out / "trip.gpx").getroot()
+        result["gpx"] = [(w.findtext("g:name", namespaces=ns), w.findtext("g:desc", namespaces=ns))
+                         for w in root.findall("g:wpt", ns)]
+        result["gpx_order"] = [c.tag.split("}")[1] for c in root][:2]
+        win.reset_trip()
+        result["after_reset"] = [len(win.runner.marks()), len(page.marks), len(rows())]
+        finish()
+
+    def finish():
+        result["toasts"] = list(toasts)
+        win.runner.stop()
+        result["after_stop"] = action.get_enabled()
         later(100, app.quit)
     later(2200, live)
 

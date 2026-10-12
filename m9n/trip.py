@@ -71,13 +71,76 @@ class Track:
         self.points = older + self.points[half:]
 
 
+class Marks:
+    """Numbered positions the user marked during the trip (waypoints), oldest first.
+
+    Each mark is a dict: number, utc (ISO 8601 or None), lat, lon, alt (MSL, m),
+    accuracy_m (horizontal) and note. Numbers are never reused after a delete, so
+    "Mark 3" in a log always means the same place; undoing the newest mark frees its number.
+    """
+    NOTE_MAX = 200
+
+    def __init__(self):
+        self.reset()
+
+    def reset(self):
+        self.items = []
+        self.next_number = 1
+
+    def add(self, nav):
+        """Mark a navigation epoch's position; the caller checks the fix is valid and fresh."""
+        when = gnss_datetime(nav)
+        mark = {"number": self.next_number, "utc": when.strftime("%Y-%m-%dT%H:%M:%SZ") if when else None,
+                "lat": nav["latitude"], "lon": nav["longitude"], "alt": nav.get("altitude_msl_m"),
+                "accuracy_m": nav.get("horizontal_accuracy_m"), "note": ""}
+        self.items.append(mark)
+        self.next_number += 1
+        return dict(mark)
+
+    def find(self, number):
+        return next((m for m in self.items if m["number"] == number), None)
+
+    def delete(self, number):
+        """Remove a mark; returns it (for undo) or None."""
+        mark = self.find(number)
+        if mark:
+            self.items.remove(mark)
+        return mark
+
+    def undo_add(self, number):
+        """Take back the newest mark, freeing its number for the next one."""
+        mark = self.delete(number)
+        if mark and number == self.next_number - 1:
+            self.next_number -= 1
+        return mark
+
+    def restore(self, mark):
+        """Put a deleted mark back in number order."""
+        if self.find(mark["number"]) is None:
+            self.items.append(dict(mark))
+            self.items.sort(key=lambda m: m["number"])
+            self.next_number = max(self.next_number, mark["number"] + 1)
+
+    def set_note(self, number, note):
+        mark = self.find(number)
+        if mark is None:
+            return None
+        mark["note"] = " ".join(str(note).split())[:self.NOTE_MAX]
+        return dict(mark)
+
+    def copy(self):
+        return [dict(m) for m in self.items]
+
+
 class Trip:
     def __init__(self):
         self.track = Track()
+        self.marks = Marks()
         self.reset()
 
     def reset(self):
         self.track.reset()
+        self.marks.reset()
         self.distance_m = 0.0
         self.moving_s = 0.0
         self.max_speed_m_s = None

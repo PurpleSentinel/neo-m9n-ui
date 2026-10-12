@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Mark position** (#56): a **Mark** button on the Vehicle page and over the Map, and the **M** key, record where you are as a numbered point (a parking spot, a hazard, a survey point).
+  - **Recorded:** number, GNSS time, position, height and the accuracy estimate. A toast confirms *Mark 3 saved* with **Undo**.
+  - **Map:** numbered magenta pins, readable on the grid and both map modes, light or dark. A **Marks** list shows each mark with Copy coordinates, Show on map, Delete (with Undo) and an optional note.
+  - **Rules:** needs a valid, current fix (the button says so otherwise). Numbers are never reused after a delete. Reset Trip and a new session clear marks; after Stop they stay for export.
+  - **Evidence and export:** snapshots gain `marks`, the JSONL log gains `mark` records, and Export Track writes them as GPX waypoints.
+
+### Changed
+- **Reset Trip** says it also clears the track and marks.
+- **Vehicle page at phone width:** narrower margins and unit buttons make room for Mark.
+
 ## 3.1.3 (2026-10-13)
 
 Clock check: how far this computer's clock is from GNSS time.

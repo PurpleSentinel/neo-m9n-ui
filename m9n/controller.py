@@ -15,6 +15,7 @@ from pathlib import Path
 from .demo import sample
 from .serialize import json_line, safe
 from .session import Session
+from .state import host_utc
 from .hostinfo import choose_port
 from .transport import SerialPort
 
@@ -225,9 +226,71 @@ class SessionController:
             self._raw = config.raw_log.open("xb")
 
     def reset_trip(self):
-        """Start trip distance and speed statistics again from the next epoch."""
+        """Start trip distance and speed statistics again from the next epoch; clears the track and marks."""
         if self.session:
+            had_marks = bool(self.session.state.trip.marks.items)
             self.session.state.trip.reset()
+            if had_marks:
+                self._mark_event("cleared")
+
+    # Marks ---------------------------------------------------------------
+
+    @property
+    def _marks(self):
+        return self.session.state.trip.marks if self.session else None
+
+    def can_mark(self, now=None):
+        """A valid, fresh fix with a position: the only thing worth marking."""
+        if not self.running:
+            return False
+        nav = self.session.state.navigation(self.clock() if now is None else now)
+        return bool(nav and nav.get("fix_ok") and nav.get("fresh")
+                    and nav.get("latitude") is not None and nav.get("longitude") is not None)
+
+    def add_mark(self, now=None):
+        """Mark the current position; returns the mark, or None without a valid fix."""
+        now = self.clock() if now is None else now
+        if not self.can_mark(now):
+            return None
+        mark = self._marks.add(self.session.state.navigation(now))
+        LOG.info("Mark %d at %.7f, %.7f", mark["number"], mark["lat"], mark["lon"])
+        self._mark_event("added", mark)
+        return mark
+
+    def undo_mark(self, number):
+        """Take back a mark just made (its number is reused)."""
+        mark = self._marks.undo_add(number) if self._marks else None
+        if mark:
+            self._mark_event("undone", mark)
+        return mark
+
+    def delete_mark(self, number):
+        mark = self._marks.delete(number) if self._marks else None
+        if mark:
+            self._mark_event("deleted", mark)
+        return mark
+
+    def restore_mark(self, mark):
+        if self._marks:
+            self._marks.restore(mark)
+            self._mark_event("restored", mark)
+
+    def set_mark_note(self, number, note):
+        mark = self._marks.set_note(number, note) if self._marks else None
+        if mark:
+            self._mark_event("note", mark)
+        return mark
+
+    def marks(self):
+        """A copy of the trip's marks, also after the session has ended."""
+        return self._marks.copy() if self._marks else []
+
+    def _mark_event(self, action, mark=None):
+        """Marks also go to the JSONL log as they change, so the evidence keeps them."""
+        event = {"schema_version": 1, "kind": "mark", "host_utc": host_utc(), "action": action}
+        if mark is not None:
+            event["mark"] = dict(mark)
+        self._write_jsonl(event)
 
     def track_points(self):
         """A copy of the trip's track (see trip.Track), also after the session has ended."""

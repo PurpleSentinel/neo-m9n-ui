@@ -19,9 +19,10 @@ from gi.repository import Adw, Gio, GLib, Gtk, Pango
 
 from ..mbtiles import MapFile, MapFileError
 from . import format as fmt
-from .pages import SessionPage
+from .pages import SessionPage, copy_text
 from .appearance import night_button
-from .vehicle import HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text, export_button
+from .vehicle import (HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text, export_button,
+                      mark_button)
 
 try:
     if os.environ.get("M9N_NO_SHUMATE"):  # Tests: behave as if libshumate were not installed.
@@ -49,6 +50,8 @@ CONSENT = (
     "Never sent: coordinates as numbers, your track, receiver identifiers, evidence files or host diagnostics.\n\n"
     "Tiles are only requested for the area in view while this page is showing, and are kept in "
     "~/.cache/neo-m9n/tiles so they aren't downloaded again. You can switch back to Off at any time.")
+PIN = (0.80, 0.18, 0.62)  # Magenta: apart from the speed colours, the blue fix and the map's own colours.
+NO_MARKS = "No marks yet. Press Mark, or M, to record the position as a numbered point."
 GRID_STEPS = (1e-4, 2e-4, 5e-4, 1e-3, 2e-3, 5e-3, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 30)
 
 
@@ -139,6 +142,7 @@ class MapOverlay(Gtk.DrawingArea):
             draw_text(self, cr, "Outside offline map", width / 2, height - 30, 13, weight=Pango.Weight.BOLD,
                       rgba=self.fg(0.6), numeric=False)
         self.draw_track(cr, projection)
+        self.draw_marks(cr, projection)
         self.draw_marker(cr, projection)
         if page.dimmed:
             draw_text(self, cr, page.dimmed.upper(), width / 2, 28, 18, weight=Pango.Weight.HEAVY,
@@ -204,6 +208,24 @@ class MapOverlay(Gtk.DrawingArea):
             cr.line_to(*b)
             cr.stroke()
 
+    def draw_marks(self, cr, projection):
+        """Numbered pins: white-edged so they read on the grid, light and dark maps alike."""
+        for mark in self.page.marks:
+            x, y = projection.to_px(mark["lat"], mark["lon"])
+            radius = 11
+            cy = y - radius * 1.9
+            cr.move_to(x, y)
+            cr.line_to(x - radius * 0.62, cy + radius * 0.75)
+            cr.arc(x, cy, radius, math.radians(145), math.radians(35))
+            cr.close_path()
+            cr.set_source_rgb(*PIN)
+            cr.fill_preserve()
+            cr.set_source_rgb(1, 1, 1)
+            cr.set_line_width(2)
+            cr.stroke()
+            draw_text(self, cr, str(mark["number"]), x, cy, 11 if mark["number"] < 100 else 8,
+                      weight=Pango.Weight.HEAVY, rgba=(1, 1, 1, 1))
+
     def draw_marker(self, cr, projection):
         fix = self.page.fix
         if fix is None:
@@ -256,6 +278,8 @@ class MapPage(SessionPage):
         self.settings = None  # Bound by the window: SessionSettings with the map_* fields.
         self.on_settings_changed = None
         self.track = []  # (lat, lon, speed m/s)
+        self.marks = []  # trip.Marks dicts, from the window
+        self._listed = None  # (number, note) pairs the Marks list was built from
         self.fix = None  # (lat, lon, horizontal accuracy m, heading or None) of the last fix shown
         self.dimmed = "Waiting"
         self.mode = "off"
@@ -348,6 +372,19 @@ class MapPage(SessionPage):
                 button.set_sensitive(False)
         overlay.add_overlay(self.overlay_area)
         overlay.add_overlay(self.recentre)
+        # On the map rather than in the toolbar: big enough to hit on the move, at any width.
+        self.mark_button = mark_button()
+        self.mark_button.add_css_class("pill")
+        self.marks_button = Gtk.MenuButton(icon_name="user-bookmarks-symbolic", tooltip_text="Marks",
+                                           valign=Gtk.Align.CENTER, popover=self.build_marks())
+        self.marks_button.add_css_class("osd")
+        self.marks_button.add_css_class("circular")
+        self.marks_button.update_property([Gtk.AccessibleProperty.LABEL], ["Marks"])
+        # Above the toasts, which appear at the bottom after every mark.
+        actions = Gtk.Box(spacing=8, halign=Gtk.Align.CENTER, valign=Gtk.Align.END, margin_bottom=88)
+        actions.append(self.mark_button)
+        actions.append(self.marks_button)
+        overlay.add_overlay(actions)
         content = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         content.append(toolbar)
         if self.missing:
@@ -401,6 +438,102 @@ class MapPage(SessionPage):
         popover = Gtk.Popover(child=box)
         popover.connect("show", lambda _p: self.show_usage())
         return popover
+
+    def build_marks(self):
+        self.marks_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.marks_list.add_css_class("boxed-list")
+        self.marks_list.set_placeholder(Gtk.Label(label=NO_MARKS, wrap=True, max_width_chars=36, margin_top=12,
+                                                  margin_bottom=12, margin_start=12, margin_end=12))
+        scrolled = Gtk.ScrolledWindow(child=self.marks_list, hscrollbar_policy=Gtk.PolicyType.NEVER,
+                                      propagate_natural_height=True, max_content_height=420)
+        title = Gtk.Label(label="Marks", xalign=0)
+        title.add_css_class("heading")
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin_top=12, margin_bottom=12,
+                      margin_start=12, margin_end=12, width_request=320)
+        box.append(title)
+        box.append(scrolled)
+        popover = Gtk.Popover(child=box)
+        popover.connect("closed", lambda _p: self.save_notes())
+        return popover
+
+    def mark_row(self, mark):
+        when = mark["utc"][11:19] + " UTC" if mark.get("utc") else "time unknown"
+        accuracy = f" ±{mark['accuracy_m']:.0f} m" if mark.get("accuracy_m") is not None else ""
+        row = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin_top=8, margin_bottom=8,
+                      margin_start=10, margin_end=6)
+        header = Gtk.Box(spacing=4)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
+        title = Gtk.Label(label=f"Mark {mark['number']} · {when}", xalign=0)
+        title.add_css_class("heading")
+        where = Gtk.Label(label=f"{mark['lat']:.7f}, {mark['lon']:.7f}{accuracy}", xalign=0, selectable=True)
+        where.add_css_class("caption")
+        where.add_css_class("numeric")
+        text.append(title)
+        text.append(where)
+        header.append(text)
+        number = mark["number"]
+        for icon, tooltip, callback in (
+                ("edit-copy-symbolic", "Copy coordinates",
+                 lambda _b: copy_text(self, f"{mark['lat']:.7f}, {mark['lon']:.7f}", "Coordinates copied")),
+                ("find-location-symbolic", "Show on map", lambda _b: self.show_mark(number)),
+                ("user-trash-symbolic", "Delete", lambda _b: self.delete_mark(number))):
+            button = Gtk.Button(icon_name=icon, tooltip_text=tooltip, valign=Gtk.Align.CENTER)
+            button.add_css_class("flat")
+            button.update_property([Gtk.AccessibleProperty.LABEL], [f"{tooltip}: mark {number}"])
+            button.connect("clicked", callback)
+            header.append(button)
+        note = Gtk.Entry(text=mark.get("note") or "", placeholder_text="Add a note", max_length=200)
+        note.number, note.saved = number, note.get_text()
+        note.connect("activate", lambda entry: self.save_notes())
+        row.append(header)
+        row.append(note)
+        row.note = note
+        return row
+
+    def set_marks(self, marks):
+        self.marks = list(marks)
+        listed = [(m["number"], m.get("note") or "") for m in self.marks]
+        numbers = [n for n, _ in listed]
+        open_now = self.marks_button.get_popover().get_visible()
+        # While the list is open, only a change of marks rebuilds it, so a note being typed survives.
+        if listed != self._listed and (not open_now or numbers != [n for n, _ in self._listed or []]):
+            self._listed = listed
+            self.marks_list.remove_all()
+            for mark in reversed(self.marks):  # Newest first.
+                self.marks_list.append(self.mark_row(mark))
+        count = len(self.marks)
+        self.marks_button.set_tooltip_text(f"Marks ({count})" if count else "Marks")
+        self.overlay_area.queue_draw()
+
+    def note_entries(self):
+        row = self.marks_list.get_first_child()
+        while row:
+            if isinstance(row, Gtk.ListBoxRow) and hasattr(row.get_child(), "note"):
+                yield row.get_child().note
+            row = row.get_next_sibling()
+
+    def save_notes(self):
+        window = self.get_root()
+        for entry in list(self.note_entries()):
+            if entry.get_text() != entry.saved and hasattr(window, "set_mark_note"):
+                entry.saved = entry.get_text()
+                window.set_mark_note(entry.number, entry.saved)
+
+    def show_mark(self, number):
+        mark = next((m for m in self.marks if m["number"] == number), None)
+        if mark is None:
+            return
+        self.marks_button.popdown()
+        if self.simple_map is not None:
+            self.following = False  # Stay on the mark until Re-centre.
+            self.recentre.set_visible(self.fix is not None)
+            self.centre_on(mark["lat"], mark["lon"])
+        self.overlay_area.queue_draw()
+
+    def delete_mark(self, number):
+        window = self.get_root()
+        if hasattr(window, "delete_mark"):
+            window.delete_mark(number)
 
     def blank_source(self):
         return tiles.renderer("blank", "Grid", "", "", tiles.BlankTiles())
@@ -625,6 +758,7 @@ class MapPage(SessionPage):
     def trip_reset(self):
         self.track = []
         self._epoch = None
+        self.set_marks([])
         self.overlay_area.queue_draw()
 
     def centre_on(self, lat, lon):
@@ -654,7 +788,8 @@ class MapPage(SessionPage):
     def projection(self, width, height):
         if self.simple_map is not None:
             return ShumateProjection(self.simple_map)
-        points = self.track[:] + ([self.fix[:2] + (None,)] if self.fix else [])
+        points = (self.track[:] + ([self.fix[:2] + (None,)] if self.fix else [])
+                  + [(m["lat"], m["lon"], None) for m in self.marks])
         return FitProjection(points, width, height)
 
     def set_fullscreen(self, fullscreen):

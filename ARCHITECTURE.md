@@ -20,7 +20,7 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `mbtiles.py` | Read-only offline map files: MBTiles with OpenMapTiles vector tiles; validation with user-facing reasons, metadata, coverage, TMS row flip, gzip, a small tile cache |
 | `sun.py` | Sunrise, sunset, civil twilight and sun elevation for a position (NOAA solar algorithm, no network); the fix's GNSS UTC from NAV-PVT or NMEA RMC |
 | `clock.py` | Clock check: median offset of the computer's clock from GNSS time (NAV-PVT when sent at its epoch, else NMEA RMC/ZDA), never polled answers; read-only |
-| `trip.py` | Trip distance (haversine between valid, fresh epochs, timed by GNSS time), moving time and speeds, with stationary-jitter and glitch rejection; `Track` keeps every valid epoch's point (UTC, position, altitude, speed, course) in segments split at gaps over 10 s, thinning the older half beyond 200,000 points |
+| `trip.py` | Trip distance (haversine between valid, fresh epochs, timed by GNSS time), moving time and speeds, with stationary-jitter and glitch rejection; `Track` keeps every valid epoch's point (UTC, position, altitude, speed, course) in segments split at gaps over 10 s, thinning the older half beyond 200,000 points; `Marks` keeps numbered positions the user marked (numbers never reused after a delete) |
 | `gpx.py` | GPX 1.1 export of a track, with speed and course in Garmin's TrackPointExtension; writes nothing that identifies the computer |
 | `demo.py` | Explicitly synthetic GNSS frames for demonstration and tests, including a moving-vehicle loop |
 

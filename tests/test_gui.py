@@ -423,6 +423,54 @@ class TrackExportTests(unittest.TestCase):
         self.assertEqual(result["live"][1], "No track to export yet: it needs a position fix")
 
 
+class MarkTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "marks", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_marks_during_the_demo_drive(self):
+        result = self.probe()
+        self.assertEqual(result["at_start"], [False, "Needs a position fix"])
+        self.assertEqual(result["live"], [True, ["Mark this position (M)"] * 2, [True, True]])
+        self.assertEqual(result["typing"], [False, 0])  # M typed into a text field is just text.
+        self.assertTrue(result["key"])
+        self.assertEqual(result["first"], {"number": 1, "on_map": True, "at_fix": True, "accuracy": 1.5,
+                                           "utc": True})
+        self.assertEqual(result["three"], [1, 2, 3])
+        self.assertEqual(result["after_undo"], [1, 2, 3])  # Undo frees the newest number.
+        self.assertEqual([label.split(" · ")[0] for label in result["listed"]], ["Mark 3", "Mark 2", "Mark 1"])
+        self.assertRegex(result["listed"][0], r"^Mark 3 · \d\d:\d\d:\d\d UTC$")
+        self.assertTrue(result["distinct_positions"])
+        self.assertEqual(result["after_delete"], [1, 3])
+        self.assertEqual(result["rows_after_delete"], 2)
+        self.assertFalse(result["following_after_show"])  # Show on map stops following.
+        self.assertEqual(result["after_delete_mark"], [1, 3, 4])  # A deleted number is not reused.
+        self.assertEqual(result["gpx"], [["Mark 1", "Parking spot"], ["Mark 3", None], ["Mark 4", None]])
+        self.assertEqual(result["gpx_order"], ["metadata", "wpt"])
+        self.assertEqual(result["after_reset"], [0, 0, 0])
+        for toast in ("Mark 1 saved", "Mark 3 removed", "Mark 2 deleted", "Trip reset: track and marks cleared"):
+            self.assertIn(toast, result["toasts"])
+        self.assertTrue(any(t.startswith("Track saved:") and t.endswith(", 3 marks") for t in result["toasts"]))
+        self.assertFalse(result["after_stop"])
+
+    def test_no_fix_disables_mark(self):
+        result = self.probe(M9N_FAULT="no-fix")
+        self.assertEqual(result["live"], [False, ["Needs a position fix"] * 2, [False, False]])
+        self.assertEqual(result["marks"], [])
+        self.assertIn("Needs a position fix", result["toasts"])  # Pressing M says why nothing happened.
+
+
 class LayoutTests(unittest.TestCase):
     """Pages use the width they get: columns follow the page's own width, never overflow it."""
 
