@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from gui_support import ROOT, gui_runtime_missing, headless_display, run_probe
+from m9n import __version__ as VERSION
 from m9n.transport import SerialPort
 from ptysim import Receiver
 
@@ -373,6 +374,53 @@ class AppearanceTests(unittest.TestCase):
         self.assertEqual(result["sun_no_fix"]["scheme"], "force-dark")
         manual = result["manual_after_sun"]
         self.assertEqual([manual["scheme"], manual["mode"], manual["saved"]], ["force-light", "light", "light"])
+
+
+class TrackExportTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def probe(self, **env):
+        process, result = run_probe(self.env, "track_export", **env)
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        return result
+
+    def test_export_after_the_demo_drive(self):
+        result = self.probe()
+        self.assertFalse(result["before"])
+        self.assertEqual(result["at_start"], [False, "No track to export yet: it needs a position fix"])
+        enabled, vehicle_tip, map_tip, sensitive = result["live"]
+        self.assertTrue(enabled)
+        self.assertEqual([vehicle_tip, map_tip], ["Export the track as GPX (Ctrl+E)"] * 2)
+        self.assertEqual(sensitive, [True, True])
+        title, name, accept = result["dialog"]
+        self.assertIn("contains your route", title)
+        self.assertRegex(name, r"^m9n-track-\d{8}-\d{6}\.gpx$")
+        self.assertEqual(accept, "Export")
+        self.assertGreaterEqual(result["points"], 1)
+        self.assertTrue(result["written"])
+        self.assertEqual(result["file"]["trkpt"], result["points"])
+        self.assertEqual(result["file"]["desc"], "Recorded by NEO-M9N Monitor " + VERSION
+                         + " from a u-blox NEO-M9N receiver")
+        self.assertFalse(result["file"]["partial_left"])
+        self.assertFalse(result["unwritable"])
+        self.assertEqual(result["dialog_after_error"], "AlertDialog")
+        self.assertIn(f"Track saved: {result['points']:,} points", result["toasts"])
+        self.assertEqual(result["after_reset"], [True])  # Reset Trip starts a new track.
+        self.assertEqual(result["after_stop"], [True, True])  # Still exportable after Stop.
+
+    def test_no_fix_has_nothing_to_export(self):
+        result = self.probe(M9N_FAULT="no-fix")
+        self.assertFalse(result["live"][0])
+        self.assertEqual(result["points"], 0)
+        self.assertEqual(result["live"][1], "No track to export yet: it needs a position fix")
 
 
 class LayoutTests(unittest.TestCase):

@@ -1,9 +1,12 @@
 """Main window: header bar, adaptive page switcher, banner, toasts and session control."""
 import logging
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from gi.repository import Adw, Gio, GLib, GObject, Gtk
 
+from .. import __version__, gpx
 from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
 from ..serialize import safe
 from ..settings import SessionSettings
@@ -18,7 +21,7 @@ from .runner import SessionRunner
 from .setup import SetupPanel
 from .testpage import TestPage
 from .mappage import MapPage
-from .vehicle import VehiclePage
+from .vehicle import EXPORT_TOOLTIP, NO_TRACK_TOOLTIP, VehiclePage
 
 LOG = logging.getLogger("m9n")
 SAVE_DELAY_MS = 500
@@ -121,6 +124,10 @@ class MainWindow(Adw.ApplicationWindow):
         sidebar = Gio.SimpleAction.new("toggle-sidebar", None)
         sidebar.connect("activate", lambda *_: self.split.set_show_sidebar(not self.split.get_show_sidebar()))
         self.add_action(sidebar)
+        self.export_action = Gio.SimpleAction.new("export-track", None)
+        self.export_action.connect("activate", lambda *_: self.export_track())
+        self.export_action.set_enabled(False)
+        self.add_action(self.export_action)
         fullscreen = Gio.SimpleAction.new("fullscreen", None)
         fullscreen.connect("activate", lambda *_: self.unfullscreen() if self.is_fullscreen() else self.fullscreen())
         self.add_action(fullscreen)
@@ -217,6 +224,62 @@ class MainWindow(Adw.ApplicationWindow):
                 page.trip_reset()
         self.toast("Trip reset")
 
+    # Track export --------------------------------------------------------
+
+    def set_track_available(self, available):
+        if available == self.export_action.get_enabled():
+            return
+        self.export_action.set_enabled(available)
+        for key in ("vehicle", "map"):
+            self.pages[key].export_button.set_tooltip_text(EXPORT_TOOLTIP if available else NO_TRACK_TOOLTIP)
+
+    def track_dialog(self):
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        dialog = Gtk.FileDialog(title="Export Track as GPX (the file contains your route)", modal=True,
+                                initial_name=f"m9n-track-{stamp}.gpx", accept_label="Export")
+        folder = Path(self.setup.settings.output_dir or default_output_dir())
+        if folder.is_dir():
+            dialog.set_initial_folder(Gio.File.new_for_path(str(folder)))
+        gpx_files = Gtk.FileFilter(name="GPX tracks (*.gpx)")
+        gpx_files.add_pattern("*.gpx")
+        filters = Gio.ListStore.new(Gtk.FileFilter)
+        filters.append(gpx_files)
+        dialog.set_filters(filters)
+        return dialog
+
+    def export_track(self):
+        """Save the trip's track as GPX, only where the user chooses."""
+        points = self.runner.track_points()
+        if not points:
+            self.toast("No track to export yet")
+            return
+        self.track_dialog().save(self, None, self.on_track_file_chosen, points)
+
+    def on_track_file_chosen(self, dialog, result, points):
+        try:
+            file = dialog.save_finish(result)
+        except GLib.Error:
+            return  # Cancelled.
+        self.write_track(file.get_path(), points)
+
+    def write_track(self, path, points):
+        identity = (self.pages["dashboard"].snapshot or {}).get("identity")
+        data = gpx.to_bytes(points, f"NEO-M9N Monitor {__version__}", gpx.receiver_model(identity))
+        path = Path(path)
+        partial = path.with_name(path.name + ".partial")
+        try:
+            partial.write_bytes(data)
+            os.replace(partial, path)
+        except OSError as exc:
+            partial.unlink(missing_ok=True)
+            self.alert("Track Not Exported", str(exc))
+            return False
+        toast = self.toast(f"Track saved: {len(points):,} points", timeout=6)
+        toast.set_button_label("Open Folder")
+        toast.connect("button-clicked", lambda *_: Gtk.FileLauncher.new(Gio.File.new_for_path(str(path)))
+                      .open_containing_folder(self, None, None))
+        return True
+
     def update_idle_inhibit(self):
         """Keep the screen on while the Vehicle or Map page shows a running session."""
         wanted = self.runner.running and self.stack.get_visible_child_name() in ("vehicle", "map")
@@ -246,6 +309,7 @@ class MainWindow(Adw.ApplicationWindow):
     def on_snapshot(self, _runner, snapshot):
         for page in self.pages.values():
             page.update(snapshot)
+        self.set_track_available(bool((snapshot.get("trip") or {}).get("epochs")))
         self.appearance.update(snapshot)
 
     def on_issue(self, _runner, kind, text):
@@ -259,6 +323,7 @@ class MainWindow(Adw.ApplicationWindow):
     def on_started(self, runner):
         for page in self.pages.values():
             page.session_started(runner.config)
+        self.set_track_available(False)  # Each session starts a new trip.
         self.setup.set_sensitive(False)
         self.toggle_action.set_enabled(True)
         self.run_test_action.set_enabled(False)

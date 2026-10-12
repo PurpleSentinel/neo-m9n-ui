@@ -19,7 +19,7 @@ APP_ID = "io.github.PurpleSentinel.NeoM9N"
 APP_NAME = "NEO-M9N Monitor"
 DATA = Path(__file__).resolve().parent / "data"
 SHORTCUTS = [("Session", [("Start or stop the session", "F5"), ("Run a device test", "<Control>t"),
-                          ("Show or hide session setup", "F9")]),
+                          ("Show or hide session setup", "F9"), ("Export the track as GPX", "<Control>e")]),
              ("General", [("Fullscreen", "F11"), ("Keyboard shortcuts", "<Control>question"),
                           ("Quit", "<Control>q")])]
 
@@ -54,6 +54,7 @@ class Application(Adw.Application):
         self.set_accels_for_action("win.toggle-sidebar", ["F9"])
         self.set_accels_for_action("win.run-test", ["<Control>t"])
         self.set_accels_for_action("win.fullscreen", ["F11"])
+        self.set_accels_for_action("win.export-track", ["<Control>e"])
         for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
             GLib.unix_signal_add(GLib.PRIORITY_HIGH, signum, self.on_signal, signum)
         self._previous_excepthook = sys.excepthook

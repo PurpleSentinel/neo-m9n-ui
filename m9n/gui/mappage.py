@@ -21,7 +21,7 @@ from ..mbtiles import MapFile, MapFileError
 from . import format as fmt
 from .pages import SessionPage
 from .appearance import night_button
-from .vehicle import HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text
+from .vehicle import HEADING_MIN_M_S, POINTER, SPEED_STOPS, STATUS, blend, draw_text, export_button
 
 try:
     if os.environ.get("M9N_NO_SHUMATE"):  # Tests: behave as if libshumate were not installed.
@@ -312,6 +312,8 @@ class MapPage(SessionPage):
         toolbar.append(self.indicator)
         toolbar.append(Gtk.Box(hexpand=True))
         toolbar.append(self.storage)
+        self.export_button = export_button()
+        toolbar.append(self.export_button)
         toolbar.append(night_button())
         toolbar.append(self.fullscreen_button)
 
@@ -355,6 +357,7 @@ class MapPage(SessionPage):
         compact = Adw.Breakpoint.new(Adw.BreakpointCondition.parse("max-width: 520sp"))
         compact.add_setter(self.indicator_label, "visible", False)  # The icon alone still shows the mode.
         compact.add_setter(self.fullscreen_button, "visible", False)  # F11 still works; phones rarely need it.
+        compact.add_setter(self.export_button, "visible", False)  # Still on the Vehicle page, and Ctrl+E.
         compact.add_setter(self.toolbar, "spacing", 4)
         for side in ("margin-start", "margin-end"):
             compact.add_setter(self.toolbar, side, 6)  # Room for night mode beside the online indicator.

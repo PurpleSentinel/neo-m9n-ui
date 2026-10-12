@@ -813,6 +813,50 @@ def appearance(win):
     later(1500, daytime)
 
 
+def track_export(win):
+    """Export Track: disabled until there is a track, the save dialog, the GPX written, reset."""
+    import tempfile
+    import xml.etree.ElementTree as ET
+    out = Path(tempfile.mkdtemp())
+    toasts = []
+    original = win.toast
+    win.toast = lambda text, timeout=3: toasts.append(text) or original(text, timeout)
+    fault = os.environ.get("M9N_FAULT") or "drive"
+    action = win.lookup_action("export-track")
+    buttons = [win.pages[key].export_button for key in ("vehicle", "map")]
+    result["before"] = action.get_enabled()
+    win.start_session(SessionConfig(source="demo", fault=fault))
+    result["at_start"] = [action.get_enabled(), buttons[0].get_tooltip_text()]
+
+    def live():
+        result["live"] = [action.get_enabled(), buttons[0].get_tooltip_text(), buttons[1].get_tooltip_text(),
+                          [b.get_sensitive() for b in buttons]]
+        dialog = win.track_dialog()
+        result["dialog"] = [dialog.get_title(), dialog.get_initial_name(), dialog.get_accept_label()]
+        points = win.runner.track_points()
+        result["points"] = len(points)
+        path = out / "trip.gpx"
+        result["written"] = win.write_track(str(path), points)
+        root = ET.parse(path).getroot()
+        ns = {"g": "http://www.topografix.com/GPX/1/1"}
+        result["file"] = {"trkpt": len(root.findall(".//g:trkpt", ns)),
+                          "desc": root.findtext("g:metadata/g:desc", namespaces=ns),
+                          "partial_left": any(out.glob("*.partial"))}
+        result["unwritable"] = win.write_track(str(out / "missing" / "trip.gpx"), points)
+        result["dialog_after_error"] = type(win.get_visible_dialog()).__name__
+        win.get_visible_dialog().force_close()
+        win.reset_trip()
+        later(1500, after_reset)
+
+    def after_reset():
+        result["after_reset"] = [action.get_enabled() if fault != "drive" else len(win.runner.track_points()) < 5]
+        result["toasts"] = list(toasts)
+        win.runner.stop()
+        result["after_stop"] = [action.get_enabled(), len(win.runner.track_points()) > 0]
+        later(100, app.quit)
+    later(2200, live)
+
+
 def layout(win):
     """Columns per page after a short demo device test, at M9N_PROBE_WIDTH with or without the sidebar."""
     win.split.set_show_sidebar(os.environ.get("M9N_SIDEBAR") == "1")

@@ -11,6 +11,7 @@ Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their 
 | F5 | Start or stop the session |
 | Ctrl+T | Run a device test |
 | F9 | Show or hide session setup |
+| Ctrl+E | Export the track as GPX |
 | F11 | Fullscreen |
 | Ctrl+? | Keyboard shortcuts |
 | Ctrl+Q | Quit (asks first while a session runs) |
@@ -94,17 +95,28 @@ A view to read at a glance on the move, for example on a tablet or laptop in a v
 - **Distance**, **average speed**, **max speed** and **moving time** tiles.
 - **Altitude** above mean sea level, over a profile of the trip.
 
-Switch between **km/h** and **mph** (also miles and feet) at the top; the choice is saved. **Reset Trip** starts distance, speeds and the profile again. The moon button turns **night mode** on and off (see [Appearance and night mode](#appearance-and-night-mode)). The trip also restarts with each session.
+Switch between **km/h** and **mph** (also miles and feet) at the top; the choice is saved. **Reset Trip** starts distance, speeds and the profile again. The moon button turns **night mode** on and off (see [Appearance and night mode](#appearance-and-night-mode)). The save button exports the track (see [Exporting the track](#exporting-the-track)). At phone width the fullscreen button is hidden; F11 still works. The trip also restarts with each session.
 
 How the trip is measured: the session counts the great-circle distance between consecutive valid, fresh navigation epochs, using the receiver's time between them. Segments below 0.5 m/s are skipped so a parked receiver's position wander is not counted as travel, and a jump that would need more than 540 km/h is treated as a glitch. The average speed is distance over moving time, so stops don't lower it. After a gap in reception (a tunnel), the straight line between the last and next fix is counted. Distances are as accurate as the positions: expect a few metres per fix, and slightly short on tight bends.
 
 Without a valid, current fix the instruments dim and say **No Fix**, **Stale** or **Waiting**; the last speed is never shown as live. While a session runs and this page is showing, the screen is kept from blanking.
 
+### Exporting the track
+
+**Export Track** (the save button on the Vehicle and Map pages, or **Ctrl+E**) saves the trip's track as a **GPX** file.
+- **Where it opens:** Google Earth, OsmAnd, QGIS, Strava, Garmin BaseCamp and most mapping apps.
+- **What it contains:** every valid position since the trip started (the session's start or the last **Reset Trip**), with height above sea level, GNSS time, speed and course.
+  - **Gaps:** after more than 10 s without a fix (a tunnel), a new track segment starts, so apps don't draw a straight line across the gap.
+  - **Points without a valid date:** these are saved without a time, rather than with a wrong one.
+- **Where it's saved:** you choose the name and folder. The suggested name is `m9n-track-<date>-<time>.gpx`, in your evidence folder.
+- **Privacy:** the file contains your route. It is written only when you export, and never sent anywhere. Apart from the track it records only the app's name and version and the receiver model, nothing about your computer.
+- **When it's available:** export also works after **Stop**, until the next session starts. The button is disabled until there is a track, and its tooltip says why.
+
 ## Map
 
 ![Map page](screenshots/map.png)
 
-Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. The moon button turns **night mode** on and off; offline maps switch to their dark style. **Reset Trip** on the Vehicle page clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
+Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. The moon button turns **night mode** on and off; offline maps switch to their dark style. The save button exports the track (see [Exporting the track](#exporting-the-track)); at phone width it is hidden, so use the Vehicle page or Ctrl+E. **Reset Trip** on the Vehicle page clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
 
 Choose how the map is drawn at the top of the page:
 - **Off** (default): the position and track on a coordinate grid, with a scale bar. Nothing leaves your computer.
