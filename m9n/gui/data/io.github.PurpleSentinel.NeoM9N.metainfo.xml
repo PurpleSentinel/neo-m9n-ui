@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.1.2" date="2026-10-12">
+      <description>
+        <p>Export Track: save the trip's track as a GPX file for mapping apps, from the Vehicle or Map page or with Ctrl+E. The file is written only where you choose and never sent anywhere.</p>
+      </description>
+    </release>
     <release version="3.1.1" date="2026-10-12">
       <description>
         <p>Night mode: a one-tap dark appearance on the Vehicle and Map pages, and an Appearance menu with Follow System, Light, Dark or Automatic by Sun (dark from dusk to dawn at the receiver's position).</p>
