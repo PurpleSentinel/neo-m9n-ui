@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## 3.0.1 (2026-10-12)
+
+A small update to the offline map script.
 
 ### Changed
 - `scripts/make-offline-map.sh` keeps its summary on screen (#52). Planetiler's full output now goes to `planetiler.log` in the working folder, and the script shows short progress steps instead. A failed build shows the end of the log. `--verbose` shows everything as before. Running it with no area now says so, with an example.
+
+### Fixed
+- The user guide said **Reset Trip** was on the Map page; it is on the Vehicle page (#51).
 
 ## 3.0.0 (2026-10-11)
 

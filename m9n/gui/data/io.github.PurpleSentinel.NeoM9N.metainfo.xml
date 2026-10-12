@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.0.1" date="2026-10-12">
+      <description>
+        <p>The offline map script keeps its summary on screen: Planetiler's full output goes to a log file and only short progress steps are shown. Running it without an area now says so. A user guide correction.</p>
+      </description>
+    </release>
     <release version="3.0.0" date="2026-10-11">
       <description>
         <p>Adds a Map page: your live position, accuracy and track on a grid, on an offline map file made once at home (works with no internet), or on an OpenStreetMap map you opt into after a privacy notice. The Python package is renamed neo-m9n-monitor.</p>
