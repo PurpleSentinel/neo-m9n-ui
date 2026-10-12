@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.2 (2026-10-12)
+
+Export the trip's track as a GPX file.
 
 ### Added
 - **Export Track** as GPX (#55): a button on the Vehicle and Map pages and **Ctrl+E**.
