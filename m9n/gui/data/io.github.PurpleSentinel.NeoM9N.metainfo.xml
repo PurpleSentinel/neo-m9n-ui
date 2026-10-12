@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.1.1" date="2026-10-12">
+      <description>
+        <p>Night mode: a one-tap dark appearance on the Vehicle and Map pages, and an Appearance menu with Follow System, Light, Dark or Automatic by Sun (dark from dusk to dawn at the receiver's position).</p>
+      </description>
+    </release>
     <release version="3.1.0" date="2026-10-12">
       <description>
         <p>The Dashboard shows sunrise, sunset, day length, civil twilight and the sun's elevation for the receiver's position, calculated locally from GNSS time with no network.</p>
