@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.1 (2026-10-12)
+
+Night mode: switch the app to dark with one tap, or let it follow the sun.
 
 ### Added
 - **Night mode** (#61): a moon button on the Vehicle and Map pages switches the whole app between light and dark with one tap.
