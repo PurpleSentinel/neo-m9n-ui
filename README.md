@@ -48,7 +48,7 @@ Automatic selection matches u-blox USB vendor ID `1546` and refuses to guess bet
 | Satellites | Every NAV-SAT satellite: constellation, SV, C/N0, elevation, azimuth, use in solution, signal quality, health; sortable; sky plot |
 | Receiver | MON-RF antenna/jamming/noise/AGC, NAV-STATUS TTFF/uptime/spoofing indication, diagnostic freshness, unanswered and rejected polls |
 | Map | Your live position, accuracy circle and the trip's track, following you: on a coordinate grid (default), on an **offline map file** made once at home (works with no internet), or on an OpenStreetMap map you opt into |
-| Vehicle | For use on the move: a speed gauge, a compass showing the course over ground, distance travelled, average and maximum speed, moving time and an altitude profile, in large colourful instruments that scale to the window; km/h or mph; fullscreen (F11) and the screen kept awake |
+| Vehicle | For use on the move: a speed gauge, a compass showing the course over ground, distance travelled, average and maximum speed, moving time and an altitude profile, in large colourful instruments that scale to the window; km/h or mph; one-tap night mode; fullscreen (F11) and the screen kept awake |
 | Messages | Receiver INF/TXT notices and parser errors for the whole session, and the application log (debug: RX/TX hex); filter, search, copy, save |
 | Test | Timed device test with progress and a PASS/WARN/FAIL/INTERRUPTED report you can save and copy |
 | Host | USB devices, access, `cdc_acm`, port owners, gpsd/ModemManager, udev properties; replaces `doctor`; save as JSON |

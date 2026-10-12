@@ -345,6 +345,36 @@ def many_satellites_capture(path, count=35):
     path.write_bytes(sample() + ubx(1, 53, bytes(payload)))
 
 
+class AppearanceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def test_night_mode(self):
+        process, result = run_probe(self.env, "appearance")
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        self.assertEqual(result["buttons"], 2)  # Vehicle and Map toolbars.
+        self.assertEqual(result["menu"], ["Appearance", ["system", "light", "dark", "sun"]])
+        self.assertEqual(result["start"]["scheme"], "default")
+        on, off = result["night_on"], result["night_off"]
+        self.assertEqual([on["scheme"], on["dark"], on["night"], on["button"], on["saved"]],
+                         ["force-dark", True, True, True, "dark"])
+        self.assertEqual([off["scheme"], off["dark"], off["night"], off["saved"]], ["force-light", False, False, "light"])
+        self.assertEqual([result["menu_dark"]["scheme"], result["menu_dark"]["night"]], ["force-dark", True])
+        self.assertEqual([result["sun_waiting"]["scheme"], result["sun_waiting"]["saved"]], ["default", "sun"])
+        self.assertEqual([result["sun_day"]["scheme"], result["sun_day"]["mode"]], ["force-light", "sun"])
+        self.assertEqual([result["sun_night"]["scheme"], result["sun_night"]["night"]], ["force-dark", True])
+        self.assertEqual(result["sun_no_fix"]["scheme"], "force-dark")
+        manual = result["manual_after_sun"]
+        self.assertEqual([manual["scheme"], manual["mode"], manual["saved"]], ["force-light", "light", "light"])
+
+
 class LayoutTests(unittest.TestCase):
     """Pages use the width they get: columns follow the page's own width, never overflow it."""
 
@@ -803,7 +833,7 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual(result["error_dialog"], "AlertDialog")
 
     def test_unplug_shows_banner(self):
-        result, _, report = self.run_trigger("unplug", mode="test", unplug_after=1.2)
+        result, _, report = self.run_trigger("unplug", mode="test", unplug_after=3.0)  # Includes start-up.
         self.assertEqual(result["reason"], "transport_error")
         self.assertIn("Device disconnected", result["banner"])
         self.assertEqual(report["status"], "FAIL")

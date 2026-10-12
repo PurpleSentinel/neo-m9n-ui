@@ -136,6 +136,8 @@ def lifecycle(win):
         if trigger in ("stop", "unplug", "complete", "cancel-close"):
             later(200, app.quit)
     win.runner.connect("finished", finished)
+    alert = win.alert
+    win.alert = lambda title, message: result.update(alert=[title, message]) or alert(title, message)  # Diagnosable.
     result["started"] = win.start_session(config) and win.runner.running
     result["running_button"] = win.session_button.get_label()
     result["inhibit"] = win._inhibit_cookie
@@ -617,7 +619,10 @@ def map_page(win):
             x, y = mappage.ShumateProjection(page.simple_map).to_px(*page.fix[:2])
             result["marker_offset"] = [x - page.simple_map.get_width() / 2, y - page.simple_map.get_height() / 2]
         width = page.adaptive.get_width()
+        shown = page.indicator.get_visible()
+        page.indicator.set_visible(True)  # Measure the widest toolbar: the online indicator showing.
         result["overflow"] = page.adaptive.get_child().measure(Gtk.Orientation.HORIZONTAL, -1)[0] > width
+        page.indicator.set_visible(shown)
         if not page.simple_map or os.environ.get("M9N_FAULT") or os.environ.get("M9N_MAP_QUICK"):
             win.runner.stop()
             later(100, app.quit)
@@ -754,6 +759,58 @@ def map_offline(win):
         later(100, app.quit)
 
     later(2500, live)
+
+
+def appearance(win):
+    """Night mode: the menu, the toolbar toggles, the saved setting and Automatic by Sun."""
+    manager = Adw.StyleManager.get_default()
+    win.appearance.set_mode("system")  # Probes share one config directory.
+
+    def state():
+        return {"scheme": manager.get_color_scheme().value_nick, "dark": manager.get_dark(),
+                "night": win.lookup_action("night-mode").get_state().get_boolean(),
+                "mode": win.lookup_action("appearance").get_state().get_string(),
+                "saved": win.setup.settings.appearance}
+
+    def walk(widget):
+        yield widget
+        child = widget.get_first_child()
+        while child:
+            yield from walk(child)
+            child = child.get_next_sibling()
+
+    buttons = [w for key in ("vehicle", "map") for w in walk(win.pages[key])
+               if isinstance(w, Gtk.ToggleButton) and w.get_action_name() == "win.night-mode"]
+    result["buttons"] = len(buttons)
+    menu = next(w for w in walk(win) if isinstance(w, Gtk.MenuButton) and w.get_primary()).get_menu_model()
+    submenu = menu.get_item_link(0, "submenu")
+    result["menu"] = [menu.get_item_attribute_value(0, "label").get_string(),
+                      [submenu.get_item_attribute_value(i, "target").get_string() for i in range(submenu.get_n_items())]]
+    result["start"] = state()
+    win.activate_action("win.night-mode", None)
+    result["night_on"] = {**state(), "button": buttons[0].get_active()}
+    win.activate_action("win.night-mode", None)
+    result["night_off"] = state()
+    win.activate_action("win.appearance", GLib.Variant("s", "dark"))
+    result["menu_dark"] = state()
+    win.activate_action("win.appearance", GLib.Variant("s", "sun"))
+    result["sun_waiting"] = state()  # No position yet: looks like the system.
+    win.start_session(SessionConfig(source="demo"))  # Isle of Man, 12:00 UTC: sun at about +29°.
+
+    def daytime():
+        result["sun_day"] = state()
+        night = json.loads(json.dumps(win.pages["dashboard"].snapshot))
+        night["navigation"]["utc"] = "2026-10-11T21:00:00Z"  # Well after dusk.
+        win.appearance.update(night)
+        result["sun_night"] = state()
+        win.appearance.update({"navigation": {}})  # Fix lost: keep the last decision.
+        result["sun_no_fix"] = state()
+        win.activate_action("win.night-mode", None)  # A manual toggle leaves Automatic by Sun.
+        result["manual_after_sun"] = state()
+        win.runner.stop()
+        win.appearance.set_mode("system")
+        later(100, app.quit)
+    later(1500, daytime)
 
 
 def layout(win):

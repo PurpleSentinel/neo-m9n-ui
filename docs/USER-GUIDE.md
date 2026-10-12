@@ -15,6 +15,22 @@ Pages adapt to the space they get. Dashboard, Receiver, Test and Host lay their 
 | Ctrl+? | Keyboard shortcuts |
 | Ctrl+Q | Quit (asks first while a session runs) |
 
+## Appearance and night mode
+
+Choose **Main Menu → Appearance**:
+- **Follow System** (default): light or dark, as your desktop is set.
+- **Light**
+- **Dark**
+- **Automatic by Sun:** dark from civil dusk to civil dawn at the receiver's position (the sun more than 6° below the horizon), light otherwise.
+  - **How it decides:** it checks once a minute using GNSS time.
+  - **No flicker at dusk:** it switches only once the sun is half a degree past the line.
+  - **Before a fix:** it looks like the system setting until the receiver has a position.
+  - **If the fix is lost:** it keeps its last choice.
+
+The **night mode** button (moon) on the Vehicle and Map pages switches between light and dark with one tap. Using it while *Automatic by Sun* is on switches to plain Light or Dark.
+
+Everything the app draws follows the appearance, including the instruments and offline maps. The choice is saved. Online OpenStreetMap map squares are drawn by OpenStreetMap, so they stay light.
+
 ## Session setup
 
 | Group | Setting | Notes |
@@ -78,7 +94,7 @@ A view to read at a glance on the move, for example on a tablet or laptop in a v
 - **Distance**, **average speed**, **max speed** and **moving time** tiles.
 - **Altitude** above mean sea level, over a profile of the trip.
 
-Switch between **km/h** and **mph** (also miles and feet) at the top; the choice is saved. **Reset Trip** starts distance, speeds and the profile again. The trip also restarts with each session.
+Switch between **km/h** and **mph** (also miles and feet) at the top; the choice is saved. **Reset Trip** starts distance, speeds and the profile again. The moon button turns **night mode** on and off (see [Appearance and night mode](#appearance-and-night-mode)). The trip also restarts with each session.
 
 How the trip is measured: the session counts the great-circle distance between consecutive valid, fresh navigation epochs, using the receiver's time between them. Segments below 0.5 m/s are skipped so a parked receiver's position wander is not counted as travel, and a jump that would need more than 540 km/h is treated as a glitch. The average speed is distance over moving time, so stops don't lower it. After a gap in reception (a tunnel), the straight line between the last and next fix is counted. Distances are as accurate as the positions: expect a few metres per fix, and slightly short on tight bends.
 
@@ -88,7 +104,7 @@ Without a valid, current fix the instruments dim and say **No Fix**, **Stale** o
 
 ![Map page](screenshots/map.png)
 
-Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. **Reset Trip** on the Vehicle page clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
+Your live position on a map: a marker that becomes an arrow pointing along your course when moving, a translucent circle showing the receiver's accuracy estimate, and the trip's track coloured by speed (green slow, red fast). The map follows you; pan it and it stops following until you press **Re-centre**. The moon button turns **night mode** on and off; offline maps switch to their dark style. **Reset Trip** on the Vehicle page clears the track, as does a new session. Without a valid, current fix the marker dims and the page says **No Fix**, **Stale** or **Waiting**.
 
 Choose how the map is drawn at the top of the page:
 - **Off** (default): the position and track on a coordinate grid, with a scale bar. Nothing leaves your computer.

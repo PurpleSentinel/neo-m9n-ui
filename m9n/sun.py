@@ -121,3 +121,20 @@ def gnss_datetime(nav):
     except ValueError:
         return None
 
+
+
+class DarkBySun:
+    """Night mode by the sun: dark once it sets below civil twilight, with hysteresis so dusk doesn't flicker."""
+    HYSTERESIS_DEG = 0.5  # Either side of -6°: 1° in all.
+
+    def __init__(self):
+        self.dark = None  # Unknown until the first elevation.
+
+    def update(self, elevation_deg):
+        if self.dark is None:
+            self.dark = elevation_deg < CIVIL_DEG
+        elif self.dark and elevation_deg > CIVIL_DEG + self.HYSTERESIS_DEG:
+            self.dark = False
+        elif not self.dark and elevation_deg < CIVIL_DEG - self.HYSTERESIS_DEG:
+            self.dark = True
+        return self.dark

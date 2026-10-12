@@ -32,6 +32,7 @@ The code is split into a GTK-free core, which can be unit-tested without a displ
 | `runner.py` | Drives `SessionController` from the GLib main loop (fd watch + tick) and re-emits its events as GObject signals |
 | `setup.py` | Session setup sidebar mirroring `SessionSettings` |
 | `pages.py`, `layout.py`, `format.py` | Page registry, base class (empty state until data) and `ColumnPage`, which flows groups into one to three columns by the page's own width; GTK-free column balancing and value formatting |
+| `appearance.py` | Follow System / Light / Dark / Automatic by Sun (`sun.DarkBySun`, hysteresis at civil dusk) through libadwaita's style manager; the night-mode toggle on the Vehicle and Map pages |
 | `dashboard.py`, `satellites.py`, `receiver.py`, `vehicle.py`, `messages.py`, `logview.py`, `testpage.py`, `host.py` | The seven pages and the shared bounded log list; `vehicle.py` draws its gauges with cairo and PangoCairo so they scale with the page; `mappage.py` puts a cairo overlay (grid, track, accuracy, marker) on libshumate's map, and `tiles.py` decides every network use: a local blank source when Off, a local offline map file through the vector renderer and the bundled `mapstyle.py` style when Offline, and OpenStreetMap only when Online, visible and consented |
 | `data/` | Desktop entry, AppStream metainfo and icons (also used from a checkout) |
 

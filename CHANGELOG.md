@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Night mode** (#61): a moon button on the Vehicle and Map pages switches the whole app between light and dark with one tap.
+  - **Main Menu → Appearance:** Follow System (default), Light, Dark, or **Automatic by Sun**, which is dark from civil dusk to dawn at the receiver's position, with hysteresis so it doesn't flicker.
+  - **Saved:** the choice persists.
+  - **Offline maps** switch to their dark style.
+
+### Fixed
+- **Map toolbar at phone width:** it keeps everything on screen with the online indicator showing. The phone-width test now measures that case.
+- **Unplug test:** it allows for app start-up time, so a slow start no longer fails it. The lifecycle probe reports any start-up error message.
+
 ## 3.1.0 (2026-10-12)
 
 The Dashboard shows sunrise, sunset and the sun's elevation for where the receiver is.
