@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.5 (2026-10-13)
+
+Coordinate formats: degrees-minutes, DMS, British National Grid and UTM.
 
 ### Added
 - **Coordinate formats** (#58): show positions in decimal degrees (default), degrees and minutes, degrees-minutes-seconds, **British National Grid** or **UTM**.
