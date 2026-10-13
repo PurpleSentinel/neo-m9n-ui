@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.1.4" date="2026-10-13">
+      <description>
+        <p>Mark position: record where you are as a numbered point with one tap or the M key, see the marks as pins on the map, list, copy, note or delete them, and export them with the track as GPX waypoints.</p>
+      </description>
+    </release>
     <release version="3.1.3" date="2026-10-13">
       <description>
         <p>Clock check: the Host and Receiver pages show how far this computer's clock is from GNSS time, so you know how far to trust log timestamps. Device test reports record it too. The app never changes the clock.</p>
