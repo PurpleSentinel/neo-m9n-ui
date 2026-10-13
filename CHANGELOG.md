@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.1.4 (2026-10-13)
+
+Mark position: numbered marks on the Vehicle and Map pages.
 
 ### Added
 - **Mark position** (#56): a **Mark** button on the Vehicle page and over the Map, and the **M** key, record where you are as a numbered point (a parking spot, a hazard, a survey point).
