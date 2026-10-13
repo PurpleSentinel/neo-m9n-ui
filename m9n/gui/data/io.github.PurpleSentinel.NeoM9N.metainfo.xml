@@ -73,6 +73,11 @@
     <binary>m9n</binary>
   </provides>
   <releases>
+    <release version="3.1.5" date="2026-10-13">
+      <description>
+        <p>Coordinate formats: show positions in decimal degrees, degrees and minutes, degrees-minutes-seconds, British National Grid (approximate, ±5 m) or UTM. Logs and exports stay in decimal WGS 84.</p>
+      </description>
+    </release>
     <release version="3.1.4" date="2026-10-13">
       <description>
         <p>Mark position: record where you are as a numbered point with one tap or the M key, see the marks as pins on the map, list, copy, note or delete them, and export them with the track as GPX waypoints.</p>
