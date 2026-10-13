@@ -1,12 +1,13 @@
 import unittest
 
+from m9n import coords
 from m9n.gui import format as fmt
 
 
 class FormatTests(unittest.TestCase):
     def test_missing_values_are_unknown(self):
         for text in (fmt.number(None), fmt.integer(None), fmt.seconds(None), fmt.speed(None),
-                     fmt.coordinate(None, "N", "S"), fmt.utc(None), fmt.utc({"utc": None})):
+                     fmt.utc(None), fmt.utc({"utc": None})):
             self.assertEqual(text, "unknown")
 
     def test_numbers_and_units(self):
@@ -18,12 +19,26 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(fmt.speed(1.25), "1.25 m/s (4.5 km/h)")
 
     def test_hemispheres(self):
-        self.assertEqual(fmt.coordinate(54.166707, "N", "S"), "54.1667070° N")
-        self.assertEqual(fmt.coordinate(-4.450342, "E", "W"), "4.4503420° W")
-        self.assertEqual(fmt.coordinate(0.0, "E", "W"), "0.0000000° E")
-        self.assertEqual(fmt.coordinates_text({"latitude": 54.166707, "longitude": -4.450342}), "54.1667070, -4.4503420")
+        nav = {"latitude": 54.166707, "longitude": -4.450342}
+        self.assertEqual(fmt.position_rows(nav), [("Latitude", "54.1667070° N"), ("Longitude", "4.4503420° W")])
+        self.assertEqual(fmt.position_rows({"latitude": 0.0, "longitude": 0.0})[1], ("Longitude", "0.0000000° E"))
+        self.assertEqual(fmt.coordinates_text(nav), "54.1667070, -4.4503420")
         self.assertIsNone(fmt.coordinates_text({"latitude": None, "longitude": 1}))
         self.assertIsNone(fmt.coordinates_text(None))
+
+    def test_coordinate_formats(self):
+        nav = {"latitude": 54.16712, "longitude": -4.48134}
+        self.assertEqual(fmt.position_rows(None), [("Latitude", "unknown"), ("Longitude", "unknown")])
+        self.assertEqual(fmt.position_rows({}, "bng"), [("Grid reference", "unknown"), ("Short form", "unknown")])
+        self.assertEqual(fmt.position_rows(None, "utm"), [("UTM (WGS 84)", "unknown")])
+        self.assertEqual(fmt.coordinates_text(nav, "dm"), "54° 10.027′ N, 4° 28.880′ W")  # As displayed.
+        self.assertEqual(fmt.coordinates_text(nav, "utm"), "30U 403291 6003129")
+        self.assertRegex(fmt.coordinates_text(nav, "bng"), r"^SC 381\d\d 774\d\d$")
+        self.assertEqual(fmt.coordinates_text(nav, "bogus"), "54.1671200, -4.4813400")
+        self.assertEqual(set(fmt.COORDINATE_FORMATS), set(coords.FORMATS))
+        for name in coords.FORMATS:
+            self.assertTrue(fmt.coordinate_example(name))
+        self.assertIn("approximate (±5 m)", fmt.coordinate_example("bng"))
 
     def test_fix_state_never_reports_stale_as_valid(self):
         self.assertEqual(fmt.fix_state(None)[0], "waiting")

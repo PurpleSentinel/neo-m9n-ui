@@ -1,9 +1,9 @@
 """Live dashboard: fix status, position, motion, timing, identity, stream health and issues."""
 from datetime import datetime, timezone
 
-from gi.repository import Adw, Gtk
+from gi.repository import Adw, Gio, GLib, Gtk
 
-from .. import sun
+from .. import coords, sun
 from ..serialize import json_line, safe
 from ..trip import distance_m
 from . import format as fmt
@@ -15,7 +15,42 @@ FIX_STYLE = {"valid": ("success", "object-select-symbolic"), "stale": ("warning"
              "none": ("error", "dialog-error-symbolic"), "waiting": ("dim-label", "content-loading-symbolic")}
 
 
+def coordinate_format_menu():
+    """The main menu's Coordinate Format section (the win.coordinate-format action)."""
+    section = Gio.Menu()
+    for name, (label, _) in fmt.COORDINATE_FORMATS.items():
+        section.append(label, f"win.coordinate-format::{name}")
+    return section
+
+
+def coordinate_format_button():
+    """The Position group's format chooser, with an example under each format."""
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin_top=12, margin_bottom=12,
+                  margin_start=12, margin_end=12)
+    title = Gtk.Label(label="Coordinate Format", xalign=0, margin_bottom=4)
+    title.add_css_class("heading")
+    box.append(title)
+    for name, (label, _) in fmt.COORDINATE_FORMATS.items():
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, margin_start=4)
+        text.append(Gtk.Label(label=label, xalign=0))
+        example = Gtk.Label(label=fmt.coordinate_example(name), xalign=0)
+        for style in ("caption", "dim-label", "numeric"):
+            example.add_css_class(style)
+        text.append(example)
+        check = Gtk.CheckButton(child=text, action_name="win.coordinate-format",
+                                action_target=GLib.Variant("s", name))
+        check.update_property([Gtk.AccessibleProperty.LABEL], [label])
+        box.append(check)
+    button = Gtk.MenuButton(icon_name="view-more-symbolic", tooltip_text="Coordinate format",
+                            valign=Gtk.Align.CENTER, popover=Gtk.Popover(child=box))
+    button.add_css_class("flat")
+    button.update_property([Gtk.AccessibleProperty.LABEL], ["Coordinate format"])
+    return button
+
+
 class DashboardPage(SessionPage):
+    coordinate_format = "decimal"
+
     def build(self):
         page = self.columns = ColumnPage()
 
@@ -43,7 +78,10 @@ class DashboardPage(SessionPage):
         def group_of(title, rows, suffix=None):
             group = Adw.PreferencesGroup(title=title)
             if suffix:
-                group.set_header_suffix(suffix)
+                box = Gtk.Box(spacing=2)
+                for widget in suffix if isinstance(suffix, list) else [suffix]:
+                    box.append(widget)
+                group.set_header_suffix(box)
             for key, label in rows:
                 self.rows[key] = value_row(label, wrap=key in ("extensions", "source", "timeouts", "utc", "updated"))
                 group.add(self.rows[key])
@@ -55,7 +93,7 @@ class DashboardPage(SessionPage):
             [group_of("Position", [("latitude", "Latitude"), ("longitude", "Longitude"),
                                    ("msl", "Altitude (mean sea level)"), ("ellipsoid", "Altitude (ellipsoid)"),
                                    ("hacc", "Horizontal accuracy"), ("vacc", "Vertical accuracy")],
-                      copy_button("Copy coordinates", self.copy_coordinates)),
+                      [coordinate_format_button(), copy_button("Copy coordinates", self.copy_coordinates)]),
              group_of("Motion", [("speed", "Speed"), ("course", "Course over ground")]),
              group_of("Dilution of Precision", [("pdop", "Position (PDOP)"), ("hdop", "Horizontal (HDOP)"),
                                                ("vdop", "Vertical (VDOP)")]),
@@ -92,8 +130,6 @@ class DashboardPage(SessionPage):
         identity = snapshot["identity"] or {}
         timeouts = sum(snapshot["poll_timeouts"].values())
         values = {
-            "latitude": fmt.coordinate(nav.get("latitude"), "N", "S"),
-            "longitude": fmt.coordinate(nav.get("longitude"), "E", "W"),
             "msl": fmt.number(nav.get("altitude_msl_m"), 2, "m"),
             "ellipsoid": fmt.number(nav.get("altitude_ellipsoid_m"), 2, "m"),
             "hacc": fmt.number(nav.get("horizontal_accuracy_m"), 2, "m"),
@@ -133,7 +169,27 @@ class DashboardPage(SessionPage):
                              ("oversize", counters.get("oversize_frame")), ("decode", snapshot["decode_errors"])):
             if counter:
                 self.rows[key].value.add_css_class("warning")
+        self.show_position(nav)
         self.show_issues(snapshot["issues"])
+
+    def set_coordinate_format(self, name):
+        self.coordinate_format = name
+        if self.snapshot:
+            self.show_position(self.snapshot["navigation"] or {})
+
+    def show_position(self, nav):
+        """Latitude and longitude, or a grid reference, in the chosen format; unused rows are hidden."""
+        shown = fmt.position_rows(nav, self.coordinate_format)
+        for index, key in enumerate(("latitude", "longitude")):
+            row = self.rows[key]
+            row.set_visible(index < len(shown))
+            if index < len(shown):
+                title, text = shown[index]
+                row.set_title(title)
+                if row.value.get_label() != text:
+                    row.value.set_label(text)
+        approximate = self.coordinate_format == "bng" and shown[0][1] not in (fmt.UNKNOWN, coords.OUTSIDE_BNG)
+        self.rows["latitude"].set_subtitle(fmt.BNG_NOTE if approximate else "")
 
     def build_sun(self, group_of):
         self.sun_key = None
@@ -184,7 +240,7 @@ class DashboardPage(SessionPage):
             self.issue_rows.append(row)
 
     def copy_coordinates(self, _button):
-        text = fmt.coordinates_text(self.snapshot and self.snapshot["navigation"])
+        text = fmt.coordinates_text(self.snapshot and self.snapshot["navigation"], self.coordinate_format)
         copy_text(self, text, "Coordinates copied" if text else "No position to copy")
 
     def copy_snapshot(self, _button):

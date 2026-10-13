@@ -33,6 +33,25 @@ The **night mode** button (moon) on the Vehicle and Map pages switches between l
 
 Everything the app draws follows the appearance, including the instruments and offline maps. The choice is saved. Online OpenStreetMap map squares are drawn by OpenStreetMap, so they stay light.
 
+## Coordinate format
+
+Choose how positions are shown in **Main Menu → Coordinate Format**, or with the **⋮** button on the Dashboard's Position group, which shows an example of each:
+
+| Format | Example |
+| --- | --- |
+| **Decimal Degrees** (default) | 54.1667070° N, 4.4503420° W |
+| **Degrees and Minutes** (marine and aviation) | 54° 10.002′ N, 4° 27.021′ W |
+| **Degrees, Minutes, Seconds** | 54° 10′ 00.1″ N, 4° 27′ 01.2″ W |
+| **British National Grid** | SC 40131 77319 (1 m), short form SC 401 773 (100 m) |
+| **UTM** (WGS 84) | 30U 405314 6003041 |
+
+- **Where it applies:** the Dashboard's position rows and the Marks list, including their **Copy coordinates** buttons, which copy the text as shown. In decimal degrees they copy signed numbers (`54.1667070, -4.4503420`), which paste into any map.
+- **British National Grid:** for Great Britain, the Isle of Man and their islands. Elsewhere, including Ireland and the Channel Islands, it reads *Outside the British National Grid*. It is **approximate (±5 m)**: the app uses Ordnance Survey's Helmert transformation rather than the survey-grade OSTN15, which is plenty for display and matches the receiver's accuracy. Grid references are truncated, not rounded, as usual.
+- **UTM:** includes the Norway and Svalbard zone exceptions. Beyond 84° N and 80° S it reads *Outside UTM (polar region)*.
+- **Display only:** logs, JSONL snapshots, test reports and GPX files always keep decimal degrees (WGS 84), so evidence files stay unambiguous. The map grid's labels also stay in decimal degrees.
+
+The choice is saved.
+
 ## Session setup
 
 | Group | Setting | Notes |
@@ -70,7 +89,7 @@ The current fix in large type: **Valid Fix**, **Stale Navigation**, **No Fix** o
   - **No network:** the times are calculated in the app, accurate to about a minute.
 - receiver identity (MON-VER), session details and stream counters
 
-Values the receiver hasn't provided read *unknown*; they are never guessed. Copy the coordinates, or the whole snapshot as JSON, with the copy buttons.
+Values the receiver hasn't provided read *unknown*; they are never guessed. Copy the coordinates, or the whole snapshot as JSON, with the copy buttons. Positions follow the [coordinate format](#coordinate-format) you choose.
 
 ![Narrow window](screenshots/narrow.png)
 
@@ -109,7 +128,7 @@ Without a valid, current fix the instruments dim and say **No Fix**, **Stale** o
 - **What's recorded:** the number, GNSS time, latitude, longitude, height and the receiver's accuracy estimate at that moment.
 - **Confirmation:** a toast says *Mark 3 saved*, with **Undo** for a mistaken tap. Undo frees the number for the next mark.
 - **On the map:** numbered magenta pins, on the grid and on both map modes, light or dark.
-- **Marks list** (the bookmark button beside Mark on the Map page): newest first, with the time, coordinates and accuracy. Each mark has **Copy coordinates**, **Show on map** (the map stops following; Re-centre to follow again), **Delete** (with Undo) and a **note** field. A deleted mark's number is never reused, so *Mark 3* always means the same place.
+- **Marks list** (the bookmark button beside Mark on the Map page): newest first, with the time, coordinates (in your [coordinate format](#coordinate-format)) and accuracy. Each mark has **Copy coordinates**, **Show on map** (the map stops following; Re-centre to follow again), **Delete** (with Undo) and a **note** field. A deleted mark's number is never reused, so *Mark 3* always means the same place.
 - **No fix:** without a valid, current fix the button is disabled and its tooltip says *Needs a position fix*; pressing M says so too.
 - **Kept until:** **Reset Trip** or the next session clears them. After **Stop** they stay listed and are exported with the track.
 - **Evidence and export:** marks are in every snapshot, and each change (added, note, deleted, restored, undone, cleared) is written to the JSONL log as a `mark` record when that log is on. **Export Track** includes them as GPX waypoints named *Mark 1*, *Mark 2*… with the note as the description.
