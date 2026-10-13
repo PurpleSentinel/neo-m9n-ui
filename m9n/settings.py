@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .controller import FAULTS, OUTPUT_FIELDS, SessionConfig, problems
+from .coords import FORMATS as COORDINATE_FORMATS
 
 SOURCES = ("device", "demo", "replay")
 BAUD_RATES = (9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600)
@@ -51,6 +52,7 @@ class SessionSettings:
     map_cache_mb: int = 200  # Online tile cache limit.
     map_offline_file: str = ""  # Offline map file (MBTiles) for the "offline" map mode.
     appearance: str = "system"  # "system", "light", "dark" or "sun" (dark after civil dusk at the receiver).
+    coordinate_format: str = "decimal"  # How positions are shown (see coords.FORMATS). Display only.
 
     @property
     def effective_mode(self):
@@ -155,6 +157,8 @@ class SessionSettings:
             settings.units = cls.units
         if settings.appearance not in APPEARANCES:
             settings.appearance = cls.appearance
+        if settings.coordinate_format not in COORDINATE_FORMATS:
+            settings.coordinate_format = cls.coordinate_format
         if (settings.map_mode not in ("off", "online", "offline")
                 or (settings.map_mode == "online" and not settings.map_consented)
                 or (settings.map_mode == "offline" and not settings.map_offline_file)):

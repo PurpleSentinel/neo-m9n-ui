@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Coordinate formats** (#58): show positions in decimal degrees (default), degrees and minutes, degrees-minutes-seconds, **British National Grid** or **UTM**.
+  - **Choosing:** Main Menu → Coordinate Format, or the ⋮ button on the Dashboard's Position group, which shows an example of each. The choice is saved.
+  - **Where:** the Dashboard's position rows and the Marks list. Copy coordinates copies the text as shown.
+  - **British National Grid:** 10-figure reference with a 6-figure short form, for Great Britain and the Isle of Man; approximate (±5 m), using Ordnance Survey's Helmert transformation. Elsewhere it says *Outside the British National Grid*.
+  - **UTM:** WGS 84, with the Norway and Svalbard zone exceptions.
+  - **Unchanged:** logs, JSONL, reports and GPX keep decimal WGS 84.
+
 ## 3.1.4 (2026-10-13)
 
 Mark position: numbered marks on the Vehicle and Map pages.

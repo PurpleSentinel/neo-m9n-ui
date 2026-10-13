@@ -280,6 +280,7 @@ class MapPage(SessionPage):
         self.track = []  # (lat, lon, speed m/s)
         self.marks = []  # trip.Marks dicts, from the window
         self._listed = None  # (number, note) pairs the Marks list was built from
+        self.coordinate_format = "decimal"
         self.fix = None  # (lat, lon, horizontal accuracy m, heading or None) of the last fix shown
         self.dimmed = "Waiting"
         self.mode = "off"
@@ -465,7 +466,8 @@ class MapPage(SessionPage):
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, hexpand=True)
         title = Gtk.Label(label=f"Mark {mark['number']} · {when}", xalign=0)
         title.add_css_class("heading")
-        where = Gtk.Label(label=f"{mark['lat']:.7f}, {mark['lon']:.7f}{accuracy}", xalign=0, selectable=True)
+        position = fmt.position_text(mark["lat"], mark["lon"], self.coordinate_format)
+        where = Gtk.Label(label=position + accuracy, xalign=0, selectable=True, wrap=True)
         where.add_css_class("caption")
         where.add_css_class("numeric")
         text.append(title)
@@ -474,7 +476,7 @@ class MapPage(SessionPage):
         number = mark["number"]
         for icon, tooltip, callback in (
                 ("edit-copy-symbolic", "Copy coordinates",
-                 lambda _b: copy_text(self, f"{mark['lat']:.7f}, {mark['lon']:.7f}", "Coordinates copied")),
+                 lambda _b: copy_text(self, position, "Coordinates copied")),
                 ("find-location-symbolic", "Show on map", lambda _b: self.show_mark(number)),
                 ("user-trash-symbolic", "Delete", lambda _b: self.delete_mark(number))):
             button = Gtk.Button(icon_name=icon, tooltip_text=tooltip, valign=Gtk.Align.CENTER)
@@ -504,6 +506,13 @@ class MapPage(SessionPage):
         count = len(self.marks)
         self.marks_button.set_tooltip_text(f"Marks ({count})" if count else "Marks")
         self.overlay_area.queue_draw()
+
+    def set_coordinate_format(self, name):
+        """Rebuild the Marks list in the new format, keeping any note being typed."""
+        self.coordinate_format = name
+        self.save_notes()
+        self._listed = None
+        self.set_marks(self.marks)
 
     def note_entries(self):
         row = self.marks_list.get_first_child()

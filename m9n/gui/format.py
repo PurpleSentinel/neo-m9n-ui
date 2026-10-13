@@ -1,7 +1,8 @@
 """Text for displayed values. GTK-free; missing values are always "unknown", never blank."""
 from datetime import timedelta
 
-from .. import clock
+from .. import clock, coords
+from ..demo import ORIGIN
 
 UNKNOWN = "unknown"
 
@@ -23,16 +24,40 @@ def seconds(value):
     return f"{value:.1f} s" if value < 120 else f"{value / 60:.1f} min"
 
 
-def coordinate(value, positive, negative):
-    if value is None:
-        return UNKNOWN
-    return f"{abs(value):.7f}° {positive if value >= 0 else negative}"
+# Coordinate format -> (menu label, row titles). The chooser's examples use the demo's fix.
+COORDINATE_FORMATS = {"decimal": ("Decimal Degrees", ("Latitude", "Longitude")),
+                      "dm": ("Degrees and Minutes", ("Latitude", "Longitude")),
+                      "dms": ("Degrees, Minutes, Seconds", ("Latitude", "Longitude")),
+                      "bng": ("British National Grid", ("Grid reference", "Short form")),
+                      "utm": ("UTM", ("UTM (WGS 84)",))}
+BNG_NOTE = "approximate (±5 m)"
 
 
-def coordinates_text(navigation):
-    """Plain decimal degrees for the clipboard, or None without a position."""
+def coordinate_example(name):
+    """One example line for the format chooser."""
+    text = coords.one_line(*ORIGIN, name)
+    return f"{text} · {BNG_NOTE}" if name == "bng" else text
+
+
+def position_rows(navigation, name="decimal"):
+    """[(title, text)] for the Dashboard's position rows in the chosen format."""
     lat, lon = (navigation or {}).get("latitude"), (navigation or {}).get("longitude")
-    return None if lat is None or lon is None else f"{lat:.7f}, {lon:.7f}"
+    if lat is None or lon is None:
+        return [(title, UNKNOWN) for title in COORDINATE_FORMATS.get(name, COORDINATE_FORMATS["decimal"])[1]]
+    return coords.rows(lat, lon, name)
+
+
+def position_text(lat, lon, name="decimal"):
+    """A position on one line: signed decimal degrees by default (pastes into any map), else as displayed."""
+    if name == "decimal" or name not in coords.FORMATS:
+        return f"{lat:.7f}, {lon:.7f}"
+    return coords.one_line(lat, lon, name)
+
+
+def coordinates_text(navigation, name="decimal"):
+    """The position for the clipboard, in the chosen format, or None without a position."""
+    lat, lon = (navigation or {}).get("latitude"), (navigation or {}).get("longitude")
+    return None if lat is None or lon is None else position_text(lat, lon, name)
 
 
 def speed(value):

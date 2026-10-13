@@ -423,6 +423,48 @@ class TrackExportTests(unittest.TestCase):
         self.assertEqual(result["live"][1], "No track to export yet: it needs a position fix")
 
 
+class CoordinateFormatTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.display = headless_display()
+        cls.env = cls.display.__enter__()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.display.__exit__(None, None, None)
+
+    def test_formats_everywhere_but_the_logs(self):
+        process, result = run_probe(self.env, "coordinates")
+        self.assertIsNotNone(result, process.stderr)
+        self.assertNotIn("timeout", result, process.stderr)
+        names = ["decimal", "dm", "dms", "bng", "utm"]
+        self.assertEqual(result["menu"], names)
+        self.assertEqual(result["chooser"], ["Coordinate format", names])
+        formats = result["formats"]
+        for name, shown in formats.items():
+            self.assertEqual(shown["check"], names.index(name))  # The chooser follows the action.
+        lat, lon = (row[0] for row in formats["decimal"]["rows"])
+        self.assertEqual([lat, lon], ["Latitude", "Longitude"])
+        self.assertRegex(formats["decimal"]["rows"][0][1], r"^54\.\d{7}° N$")
+        self.assertRegex(formats["decimal"]["mark"], r"^54\.\d{7}, -4\.\d{7} ±\d+ m$")  # Unchanged default.
+        self.assertRegex(formats["dm"]["rows"][0][1], r"^54° \d\d\.\d{3}′ N$")
+        self.assertRegex(formats["dm"]["rows"][1][1], r"^4° \d\d\.\d{3}′ W$")
+        self.assertRegex(formats["dms"]["rows"][1][1], r"^4° \d\d′ \d\d\.\d″ W$")
+        self.assertRegex(formats["dms"]["mark"], r"^54° \d\d′ \d\d\.\d″ N, 4° \d\d′ \d\d\.\d″ W ±\d+ m$")
+        bng = formats["bng"]["rows"]
+        self.assertEqual([row[0] for row in bng], ["Grid reference", "Short form"])
+        self.assertRegex(bng[0][1], r"^SC \d{5} \d{5}$")  # The demo drive is on the Isle of Man.
+        self.assertRegex(bng[1][1], r"^SC \d{3} \d{3}$")
+        self.assertEqual(bng[0][2], "approximate (±5 m)")
+        self.assertRegex(formats["bng"]["mark"], r"^SC \d{5} \d{5} ±\d+ m$")
+        self.assertEqual(len(formats["utm"]["rows"]), 1)  # The longitude row is hidden.
+        self.assertRegex(formats["utm"]["rows"][0][1], r"^30U \d{6} \d{7}$")
+        self.assertEqual(formats["dm"]["rows"][0][2], "")
+        self.assertRegex(result["clipboard"], r"^30U \d{6} \d{7}$")  # Copy copies what is shown.
+        self.assertEqual(result["saved"], "utm")
+        self.assertEqual(result["jsonl"], ["float", "float", False, False])  # Logs keep decimal WGS 84.
+
+
 class MarkTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

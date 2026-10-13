@@ -78,15 +78,16 @@ class SettingsTests(unittest.TestCase):
         file = self.path / "settings.json"
         original = self.settings(source="demo", fault="frozen", baud=115200, interval=.5, json_log=True,
                                  pinned={"json_log": "/tmp/a.jsonl"}, units="imperial",
-                                 appearance="sun")
+                                 appearance="sun", coordinate_format="bng")
         original.save(file)
         self.assertEqual(SessionSettings.load(file), original)
         file.write_text(json.dumps({"baud": 1234, "interval": "fast", "debug": 1, "source": "radio",
                                     "pinned": {"bogus": 1}, "mode": "test", "unknown": True, "units": "furlongs",
-                                    "appearance": "sepia"}))
+                                    "appearance": "sepia", "coordinate_format": "what3words"}))
         loaded = SessionSettings.load(file)
         self.assertEqual((loaded.baud, loaded.interval, loaded.debug, loaded.source, loaded.pinned, loaded.mode,
-                          loaded.units, loaded.appearance), (9600, 1.0, False, "device", {}, "test", "metric", "system"))
+                          loaded.units, loaded.appearance, loaded.coordinate_format),
+                         (9600, 1.0, False, "device", {}, "test", "metric", "system", "decimal"))
         file.write_text("not json")
         self.assertEqual(SessionSettings.load(file), SessionSettings())
         self.assertEqual(SessionSettings.load(self.path / "missing.json"), SessionSettings())

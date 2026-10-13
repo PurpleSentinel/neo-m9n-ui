@@ -6,12 +6,12 @@ from pathlib import Path
 
 from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk
 
-from .. import __version__, gpx
+from .. import __version__, coords, gpx
 from ..controller import COMPLETED, INTERRUPTED, OUTPUT_ERROR, TRANSPORT_ERROR, USER_STOPPED
 from ..serialize import safe
 from ..settings import SessionSettings
 from .appearance import Appearance
-from .dashboard import DashboardPage
+from .dashboard import DashboardPage, coordinate_format_menu
 from .host import HostPage
 from .messages import MessagesPage
 from .receiver import ReceiverPage
@@ -55,6 +55,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.session_button.add_css_class("suggested-action")
         menu = Gio.Menu()
         menu.append_submenu("Appearance", Appearance.menu())
+        menu.append_submenu("Coordinate Format", coordinate_format_menu())
         menu.append("Keyboard Shortcuts", "app.shortcuts")
         menu.append("About NEO-M9N Monitor", "app.about")
         menu_button = Gtk.MenuButton(icon_name="open-menu-symbolic", menu_model=menu, primary=True,
@@ -145,6 +146,12 @@ class MainWindow(Adw.ApplicationWindow):
         vehicle = self.pages["vehicle"]
         vehicle.set_units(settings.units)
         vehicle.on_units_changed = self.on_units_changed
+        self.coordinate_action = Gio.SimpleAction.new_stateful(
+            "coordinate-format", GLib.VariantType.new("s"), GLib.Variant("s", settings.coordinate_format))
+        self.coordinate_action.connect("change-state",
+                                       lambda _action, value: self.set_coordinate_format(value.get_string()))
+        self.add_action(self.coordinate_action)
+        self.set_coordinate_format(settings.coordinate_format, save=False)
         self._idle_cookie = 0
         self.stack.connect("notify::visible-child-name", lambda *_: self.on_page_shown())
         self.on_setup_changed(self.setup)
@@ -211,6 +218,17 @@ class MainWindow(Adw.ApplicationWindow):
     def on_units_changed(self, units):
         self.setup.settings.units = units
         self.on_setup_changed(self.setup)
+
+    def set_coordinate_format(self, name, save=True):
+        """Show positions in another format everywhere they are displayed. Display only."""
+        if name not in coords.FORMATS:
+            return
+        self.coordinate_action.set_state(GLib.Variant("s", name))
+        for key in ("dashboard", "map"):
+            self.pages[key].set_coordinate_format(name)
+        if save and name != self.setup.settings.coordinate_format:
+            self.setup.settings.coordinate_format = name
+            self.on_setup_changed(self.setup)
 
     def on_appearance_changed(self, mode):
         self.setup.settings.appearance = mode

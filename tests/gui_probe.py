@@ -849,6 +849,64 @@ def appearance(win):
     later(1500, daytime)
 
 
+def coordinates(win):
+    """Coordinate formats: the Dashboard rows, Copy Coordinates, the Marks list, the saved setting, JSONL."""
+    import tempfile
+    from m9n.settings import SessionSettings
+    page, map_page = win.pages["dashboard"], win.pages["map"]
+    win.set_coordinate_format("decimal")  # Probes share one config directory.
+    menu = next(w for w in iter_all(win) if isinstance(w, Gtk.MenuButton) and w.get_primary()).get_menu_model()
+    labels = [menu.get_item_attribute_value(i, "label").get_string() for i in range(menu.get_n_items())]
+    submenu = menu.get_item_link(labels.index("Coordinate Format"), "submenu")
+    result["menu"] = [submenu.get_item_attribute_value(i, "target").get_string() for i in range(submenu.get_n_items())]
+    chooser = [w for w in iter_all(page) if isinstance(w, Gtk.MenuButton)]
+    checks = [w for w in iter_all(chooser[0].get_popover()) if isinstance(w, Gtk.CheckButton)]
+    result["chooser"] = [chooser[0].get_tooltip_text(), [c.get_action_target_value().get_string() for c in checks]]
+    log = Path(tempfile.mkdtemp()) / "log.jsonl"
+    win.start_session(SessionConfig(source="demo", json_log=log))
+
+    def rows():
+        return [(page.rows[key].get_title(), page.rows[key].value.get_label(), page.rows[key].get_subtitle() or "")
+                for key in ("latitude", "longitude") if page.rows[key].get_visible()]
+
+    def show_all():
+        win.add_mark()
+        result["formats"] = {}
+        for name in ("dm", "dms", "bng", "utm", "decimal"):
+            win.activate_action("win.coordinate-format", GLib.Variant("s", name))
+            mark = next(r.get_child() for r in iter_children(map_page.marks_list) if isinstance(r, Gtk.ListBoxRow))
+            result["formats"][name] = {
+                "rows": rows(), "check": [c.get_active() for c in checks].index(True),
+                "mark": mark.get_first_child().get_first_child().get_last_child().get_label()}
+        win.activate_action("win.coordinate-format", GLib.Variant("s", "utm"))
+        page.copy_coordinates(None)
+        win.get_clipboard().read_text_async(None, copied)
+
+    def copied(board, outcome):
+        result["clipboard"] = board.read_text_finish(outcome)
+        result["nav"] = [page.snapshot["navigation"]["latitude"], page.snapshot["navigation"]["longitude"]]
+        win.save_settings()
+        result["saved"] = SessionSettings.load().coordinate_format
+        win.runner.stop()
+        lines = [json.loads(line) for line in log.read_text().splitlines()]
+        snapshots = [line for line in lines if line.get("kind") == "snapshot"]
+        nav = snapshots[-1]["navigation"]
+        result["jsonl"] = [type(nav["latitude"]).__name__, type(nav["longitude"]).__name__,
+                           "30U" in log.read_text(), " SC " in log.read_text()]
+        win.set_coordinate_format("decimal")
+        win.save_settings()
+        later(100, app.quit)
+    later(1500, show_all)
+
+
+def iter_all(widget):
+    yield widget
+    child = widget.get_first_child()
+    while child:
+        yield from iter_all(child)
+        child = child.get_next_sibling()
+
+
 def track_export(win):
     """Export Track: disabled until there is a track, the save dialog, the GPX written, reset."""
     import tempfile
